@@ -645,33 +645,33 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [x] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped)
-- [x] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport`
-- [x] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0
-- [x] 2.4 `uv run mypy src` passes
-- [x] 2.5 `uv run ruff check` passes
+- [x] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped) — faad54b
+- [x] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport` — faad54b
+- [x] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0 — faad54b
+- [x] 2.4 `uv run mypy src` passes — faad54b
+- [x] 2.5 `uv run ruff check` passes — faad54b
 
 #### Manual
 
-- [x] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01
-- [x] 2.7 Confirm `OPENROUTER_API_KEY` never printed
+- [x] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01 — faad54b
+- [x] 2.7 Confirm `OPENROUTER_API_KEY` never printed — faad54b
 
 ### Phase 3: LangGraph Runtime, Tools & End-to-End Smoke
 
 #### Automated
 
-- [ ] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default
-- [ ] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay
-- [ ] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory
-- [ ] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage
-- [ ] 3.5 `uv run mypy src` passes
-- [ ] 3.6 `uv run ruff check` passes
+- [x] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default
+- [x] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay
+- [x] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory
+- [x] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage
+- [x] 3.5 `uv run mypy src` passes
+- [x] 3.6 `uv run ruff check` passes
 
 #### Manual
 
-- [ ] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit
-- [ ] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed)
-- [ ] 3.9 Confirm no secrets/source spans echoed beyond the analysis call
+- [x] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit
+- [x] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed)
+- [x] 3.9 Confirm no secrets/source spans echoed beyond the analysis call
 
 ### Phase 4: Compensation Owed — `AGENTS.md`
 
