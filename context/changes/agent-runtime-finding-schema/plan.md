@@ -677,11 +677,12 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [x] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only)
-- [x] 4.2 `AGENTS.md` exists at repo root
+- [x] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only) — f1c79dc
+- [x] 4.2 `AGENTS.md` exists at repo root — f1c79dc
 
 #### Manual
 
-- [x] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section
-- [x] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md`
+- [x] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section — f1c79dc
+- [x] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md` — f1c79dc
+
 
