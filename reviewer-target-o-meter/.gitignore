@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment files (real secrets — `.env.example` is committed, `.env` is not)
+.env
+.env.*
+!.env.example
