@@ -29,7 +29,7 @@ A developer assigned to review pull requests must judge — under time pressure,
 
 | ID | Change ID | Outcome (user can …) | Prerequisites | PRD refs | Status |
 |---|---|---|---|---|---|
-| F-01 | agent-runtime-finding-schema | (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place | — | FR-006, FR-009, FR-011 (scaffold) | ready |
+| F-01 | agent-runtime-finding-schema | (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place | — | FR-006, FR-009, FR-011 (scaffold) | done |
 | F-02 | change-input-pipeline | (foundation) the tool accepts a checked-out directory, discovers the target branch, computes a capped diff, and loads repo context | — | FR-002, FR-004, FR-005 (scaffold) | ready |
 | S-01 | stdout-critical-points-report | run the tool on a checked-out change and get a structured JSON critical-points report to stdout, with file/line anchors and an advisory exit code | F-01, F-02 | US-01, FR-001, FR-002, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011 | proposed |
 | S-02 | github-review-posting | open a PR and see the findings posted automatically as a GitHub Review with inline, jump-to-location annotations (advisory exit) | S-01 | US-01, FR-001, FR-003, FR-007, FR-008, FR-009 | blocked |
@@ -60,7 +60,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - Severity levels for the hardcoded mapping are not yet defined (PRD OQ "Severity taxonomy") — Owner: user. Block: no (planning adopts a working default, e.g. critical/warning/info, and the user confirms).
 - **Risk:** Sequenced first because the agent layer is the highest-risk, most unfamiliar part (`quality_override: true` — LangChain docs churn, agent-judgment not yet built). Landing the scaffold + typed schema early de-risks the whole roadmap and forces the severity-taxonomy decision while it is still cheap to change.
-- **Status:** ready
+- **Status:** done
 
 ### F-02: Change input pipeline (directory → capped diff + loaded context)
 
@@ -142,6 +142,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ## Done
 
-(Empty on first generation. `/10x-archive` appends an entry here — and flips that item's `Status` to `done` — when a change whose `Change ID` matches the item is archived. Do NOT pre-populate. Format:)
-
-- **<Slice ID>: <Outcome>** — Archived <YYYY-MM-DD> → `context/archive/<YYYY-MM-DD-change-id>/`. Lesson: <pointer to lessons.md if any, or `—`>.
+- **F-01: (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place** — Archived 2026-08-01 → `context/archive/2026-08-01-agent-runtime-finding-schema/`. Lesson: —.

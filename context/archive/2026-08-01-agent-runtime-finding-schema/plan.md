@@ -630,57 +630,59 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [ ] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered
-- [ ] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code)
-- [ ] 1.3 `uv run mypy src` passes
-- [ ] 1.4 `uv run ruff check` passes
-- [ ] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates
+- [x] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered — a91299e
+- [x] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code) — a91299e
+- [x] 1.3 `uv run mypy src` passes — a91299e
+- [x] 1.4 `uv run ruff check` passes — a91299e
+- [x] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates — a91299e
 
 #### Manual
 
-- [ ] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING`
-- [ ] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output
+- [x] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING` — a91299e
+- [x] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output — a91299e
 
 ### Phase 2: Provider Wiring + Structured-Output Smoke
 
 #### Automated
 
-- [ ] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped)
-- [ ] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport`
-- [ ] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0
-- [ ] 2.4 `uv run mypy src` passes
-- [ ] 2.5 `uv run ruff check` passes
+- [x] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped) — faad54b
+- [x] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport` — faad54b
+- [x] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0 — faad54b
+- [x] 2.4 `uv run mypy src` passes — faad54b
+- [x] 2.5 `uv run ruff check` passes — faad54b
 
 #### Manual
 
-- [ ] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01
-- [ ] 2.7 Confirm `OPENROUTER_API_KEY` never printed
+- [x] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01 — faad54b
+- [x] 2.7 Confirm `OPENROUTER_API_KEY` never printed — faad54b
 
 ### Phase 3: LangGraph Runtime, Tools & End-to-End Smoke
 
 #### Automated
 
-- [ ] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default
-- [ ] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay
-- [ ] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory
-- [ ] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage
-- [ ] 3.5 `uv run mypy src` passes
-- [ ] 3.6 `uv run ruff check` passes
+- [x] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default — 49554c7
+- [x] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay — 49554c7
+- [x] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory — 49554c7
+- [x] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage — 49554c7
+- [x] 3.5 `uv run mypy src` passes — 49554c7
+- [x] 3.6 `uv run ruff check` passes — 49554c7
 
 #### Manual
 
-- [ ] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit
-- [ ] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed)
-- [ ] 3.9 Confirm no secrets/source spans echoed beyond the analysis call
+- [x] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit — 49554c7
+- [x] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed) — 49554c7
+- [x] 3.9 Confirm no secrets/source spans echoed beyond the analysis call — 49554c7
 
 ### Phase 4: Compensation Owed — `AGENTS.md`
 
 #### Automated
 
-- [ ] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only)
-- [ ] 4.2 `AGENTS.md` exists at repo root
+- [x] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only) — f1c79dc
+- [x] 4.2 `AGENTS.md` exists at repo root — f1c79dc
 
 #### Manual
 
-- [ ] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section
-- [ ] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md`
+- [x] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section — f1c79dc
+- [x] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md` — f1c79dc
+
+
