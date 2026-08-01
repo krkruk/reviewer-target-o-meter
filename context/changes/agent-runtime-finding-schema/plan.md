@@ -630,31 +630,31 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [x] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered
-- [x] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code)
-- [x] 1.3 `uv run mypy src` passes
-- [x] 1.4 `uv run ruff check` passes
-- [x] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates
+- [x] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered — a91299e
+- [x] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code) — a91299e
+- [x] 1.3 `uv run mypy src` passes — a91299e
+- [x] 1.4 `uv run ruff check` passes — a91299e
+- [x] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates — a91299e
 
 #### Manual
 
-- [x] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING`
-- [x] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output
+- [x] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING` — a91299e
+- [x] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output — a91299e
 
 ### Phase 2: Provider Wiring + Structured-Output Smoke
 
 #### Automated
 
-- [ ] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped)
-- [ ] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport`
-- [ ] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0
-- [ ] 2.4 `uv run mypy src` passes
-- [ ] 2.5 `uv run ruff check` passes
+- [x] 2.1 `uv run pytest` (default) green and does not hit the network (smoke skipped)
+- [x] 2.2 `SMOKE=1 uv run pytest -m smoke` passes against real OpenRouter, returns validated non-empty `FindingsReport`
+- [x] 2.3 `make llm-test` runs the smoke set end-to-end (equiv. `SMOKE=1 uv run pytest -m smoke`) and exits 0
+- [x] 2.4 `uv run mypy src` passes
+- [x] 2.5 `uv run ruff check` passes
 
 #### Manual
 
-- [ ] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01
-- [ ] 2.7 Confirm `OPENROUTER_API_KEY` never printed
+- [x] 2.6 Inspect smoke output — free model populates the full shape without truncation; note struggles for S-01
+- [x] 2.7 Confirm `OPENROUTER_API_KEY` never printed
 
 ### Phase 3: LangGraph Runtime, Tools & End-to-End Smoke
 
