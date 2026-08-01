@@ -1,0 +1,17 @@
+[project]
+name = "reviewer-target-o-meter"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Krzysztof Kruk", email = "krzysztof.pawel.kruk@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+reviewer-target-o-meter = "reviewer_target_o_meter:main"
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
