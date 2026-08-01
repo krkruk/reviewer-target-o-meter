@@ -630,16 +630,16 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [ ] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered
-- [ ] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code)
-- [ ] 1.3 `uv run mypy src` passes
-- [ ] 1.4 `uv run ruff check` passes
-- [ ] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates
+- [x] 1.1 `uv sync` succeeds; `uv.lock` pins langchain/langgraph/langchain-openai/langchain-core/pydantic/typer/gitpython + dev (pytest/ruff/mypy); `smoke` marker registered
+- [x] 1.2 `uv run pytest` schema-validator unit tests pass (end_line, absolute-path, fixes cap, is_flagged, exit_code)
+- [x] 1.3 `uv run mypy src` passes
+- [x] 1.4 `uv run ruff check` passes
+- [x] 1.5 `Makefile` + `make.sh` exist; `make check` (ruff+mypy) and `make test` (unit, smoke excluded) exit 0; `make help` lists targets; `./make.sh check` delegates
 
 #### Manual
 
-- [ ] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING`
-- [ ] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output
+- [x] 1.5 Confirm schema field set = full impl-review shape and excludes `Decision: PENDING`
+- [x] 1.6 Confirm `is_flagged` absent from `FindingsReport.model_json_schema()` output
 
 ### Phase 2: Provider Wiring + Structured-Output Smoke
 

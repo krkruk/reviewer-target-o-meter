@@ -7,10 +7,30 @@ authors = [
     { name = "Krzysztof Kruk", email = "krzysztof.pawel.kruk@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "langchain==1.3.14",
+    "langgraph==1.2.10",
+    "langchain-openai==1.4.1",
+    "langchain-core",
+    "pydantic",
+    "typer",
+    "gitpython",
+]
 
 [project.scripts]
 reviewer-target-o-meter = "reviewer_target_o_meter:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: live OpenRouter tests — opt in via make llm-test (SMOKE=1)",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.29,<0.12.0"]
