@@ -660,27 +660,28 @@ None — greenfield; the baseline is an empty `uv init` scaffold. No existing da
 
 #### Automated
 
-- [x] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default
-- [x] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay
-- [x] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory
-- [x] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage
-- [x] 3.5 `uv run mypy src` passes
-- [x] 3.6 `uv run ruff check` passes
+- [x] 3.1 `uv run pytest` green: tool tests (incl. missing-`sg` degrade) + graph tests (mocked LLM) pass; smoke still skipped by default — 49554c7
+- [x] 3.2 Recursion-probe test documents confirmed inner-vs-outer recursion interplay — 49554c7
+- [x] 3.3 `uv run reviewer-target-o-meter <fixture-dir>` prints valid `FindingsReport` JSON + exits 0/1 advisory — 49554c7
+- [x] 3.4 `make run DIR=<fixture-dir>` and `./make.sh run <fixture-dir>` match the bare console command; `make run` w/o `DIR` errors with usage — 49554c7
+- [x] 3.5 `uv run mypy src` passes — 49554c7
+- [x] 3.6 `uv run ruff check` passes — 49554c7
 
 #### Manual
 
-- [x] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit
-- [x] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed)
-- [x] 3.9 Confirm no secrets/source spans echoed beyond the analysis call
+- [x] 3.7 `SMOKE=1 uv run reviewer-target-o-meter <fixture-dir>` end-to-end — real validated full-shape report to stdout + advisory exit — 49554c7
+- [x] 3.8 Force tiny `recursion_limit` — partial report + advisory exit (fail-safe confirmed) — 49554c7
+- [x] 3.9 Confirm no secrets/source spans echoed beyond the analysis call — 49554c7
 
 ### Phase 4: Compensation Owed — `AGENTS.md`
 
 #### Automated
 
-- [ ] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only)
-- [ ] 4.2 `AGENTS.md` exists at repo root
+- [x] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green (docs-only)
+- [x] 4.2 `AGENTS.md` exists at repo root
 
 #### Manual
 
-- [ ] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section
-- [ ] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md`
+- [x] 4.3 Every `tech-stack.md:148-163` "Compensation owed" bullet covered by an `AGENTS.md` section
+- [x] 4.4 Fresh reader can locate pinned versions, graph convention, severity rules, and developer commands (`make check/test/llm-test/run`) without reading `research.md`
+
