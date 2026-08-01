@@ -1,7 +1,7 @@
 ---
 change_id: agent-runtime-finding-schema
 title: Agent runtime + typed Finding/Severity schema + OpenRouter wiring
-status: implemented
+status: impl_reviewed
 created: 2026-08-01
 updated: 2026-08-01
 archived_at: null

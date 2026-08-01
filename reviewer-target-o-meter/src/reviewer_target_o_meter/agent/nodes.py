@@ -17,7 +17,7 @@ from typing import Any
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, Runtime
 from langchain.agents.structured_output import ProviderStrategy
-from langchain.messages import HumanMessage, SystemMessage
+from langchain.messages import HumanMessage
 from pydantic import ValidationError
 
 from ..config import Config
@@ -104,7 +104,6 @@ def build_checks_node(config: Config, agent: Any = None):
         else:
             parts.append("Plan: (none provided — skip plan-dependent checks)")
         messages = [
-            SystemMessage(content=_SYSTEM_PROMPT),
             HumanMessage(content="\n\n".join(parts)),
         ]
         # ainvoke (async) so the node's TimeoutPolicy(run_timeout) can be enforced —

@@ -35,7 +35,7 @@ def text_search(query: str, repo_path: str, max_count: int = 50) -> str:
 
     try:
         proc = subprocess.run(
-            ["rg", "--no-heading", "-n", "--max-count", str(max_count), query, repo_path],
+            ["rg", "--no-heading", "-n", "--max-count", str(max_count), "-e", query, repo_path],
             capture_output=True,
             text=False,
             timeout=30,
@@ -44,7 +44,7 @@ def text_search(query: str, repo_path: str, max_count: int = 50) -> str:
         out = proc.stdout.decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return f"text_search timed out after 30s (query={query!r})."
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return "ripgrep (rg) unavailable on PATH; install it or ask the caller."
 
     if len(out) > _MAX_OUTPUT:

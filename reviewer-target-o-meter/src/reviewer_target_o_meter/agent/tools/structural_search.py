@@ -46,7 +46,7 @@ def structural_search(pattern: str, repo_path: str, lang: str | None = None) -> 
         out = proc.stdout.decode("utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return f"structural_search timed out after 30s (pattern={pattern!r})."
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         return "ast-grep (sg) unavailable on PATH; use text_search instead."
 
     if len(out) > _MAX_OUTPUT:

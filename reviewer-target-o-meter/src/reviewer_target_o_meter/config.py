@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -25,7 +25,7 @@ class Config(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    api_key: str
+    api_key: str = Field(..., repr=False)  # never echo in repr — prevents accidental key exposure
     model: str = DEFAULT_MODEL
     base_url: str = DEFAULT_BASE_URL
 
