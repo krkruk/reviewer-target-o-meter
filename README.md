@@ -92,7 +92,7 @@ philosophy, `AGENTS.md` §b):
 
 - **[`ripgrep`](https://github.com/BurntSushi/ripgrep)** (`rg`) — backs
   `text_search`. Pre-installed on `ubuntu-latest` in GitHub Actions.
-- **[`ast-grep`](https://ast-grep.github.io)** (`sg`) — backs
+- **[`ast-grep`](https://ast-grep.github.io)** — backs
   `structural_search`. Not pre-installed on GHA runners; see the
   [install recipe](#github-actions-integration) below.
 
@@ -241,11 +241,11 @@ prebuilt binary — note the asset carries an `app-` prefix (the unprefixed URL
 ```yaml
 - name: Install ast-grep (structural_search tool)
   run: |
-    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o sg.zip
-    unzip sg.zip && install -m 0755 ast-grep /usr/local/bin/sg
+    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o ast-grep.zip
+    unzip ast-grep.zip && install -m 0755 ast-grep /usr/local/bin/ast-grep
 ```
 
-If `sg` is unavailable at runtime, `structural_search` degrades to an error
+If `ast-grep` is unavailable at runtime, `structural_search` degrades to an error
 string pointing the agent at `text_search` — the pipeline still runs.
 
 ### Install source

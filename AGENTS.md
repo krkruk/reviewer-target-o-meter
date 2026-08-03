@@ -139,7 +139,7 @@ Before trusting (or posting) a `FindingsReport`, sanity-check it:
 
 ## (f) ast-grep GitHub Actions install recipe
 
-`ripgrep` (`rg`) ships on `ubuntu-latest`; `ast-grep` (`sg`) needs a setup step.
+`ripgrep` (`rg`) ships on `ubuntu-latest`; `ast-grep` needs a setup step.
 Recorded here so S-02 doesn't re-discover it:
 
 ```yaml
@@ -151,11 +151,11 @@ Recorded here so S-02 doesn't re-discover it:
     # prefix (app-x86_64-unknown-linux-gnu.zip), NOT x86_64-unknown-linux-gnu.zip
     # — the unprefixed URL 404s and breaks the step (verified on the consumer
     # GHA run, 2026-08-03).
-    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o sg.zip
-    unzip sg.zip && install -m 0755 ast-grep /usr/local/bin/sg
+    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o ast-grep.zip
+    unzip ast-grep.zip && install -m 0755 ast-grep /usr/local/bin/ast-grep
 ```
 
-If `sg` is unavailable at runtime, `structural_search` returns an error string
+If `ast-grep` is unavailable at runtime, `structural_search` returns an error string
 pointing the model at `text_search` — the pipeline still runs (degrade philosophy).
 
 ## (g) Developer commands
@@ -225,5 +225,5 @@ an established implementation-review methodology rather than inventing one:
 
 - **S-02:** GitHub posting on the consumer GHA workflow + the `ast-grep` GHA
   install (the recipe is recorded in §f; `structural_search` degrades to a
-  pointer at `text_search` when `sg` is unavailable).
+  pointer at `text_search` when `ast-grep` is unavailable).
 - **S-02:** GitHub posting + the GHA workflow. F-01 only *records* the ast-grep recipe.

@@ -86,12 +86,14 @@ def test_text_search_max_count_flows_into_rg(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_structural_search_returns_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_subprocess(monkeypatch, stdout=b"src/app.py:10:match\n")
+    calls = _patch_subprocess(monkeypatch, stdout=b"src/app.py:10:match\n")
     out = structural_search.invoke({"pattern": "$X + $Y", "repo_path": "/repo"})
     assert "src/app.py:10" in out
+    # Pin the binary name: the cmd list must invoke ast-grep, not its deprecated alias.
+    assert calls[0][0][0] == "ast-grep"
 
 
-def test_structural_search_degrades_when_sg_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_structural_search_degrades_when_ast_grep_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_subprocess(monkeypatch, binaries_present=False)
     out = structural_search.invoke({"pattern": "$X", "repo_path": "/repo"})
     assert "ast-grep" in out.lower() and "text_search" in out.lower()
@@ -99,7 +101,7 @@ def test_structural_search_degrades_when_sg_missing(monkeypatch: pytest.MonkeyPa
 
 def test_structural_search_catches_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(cmd, **kw):
-        raise subprocess.TimeoutExpired(cmd="sg", timeout=30)
+        raise subprocess.TimeoutExpired(cmd="ast-grep", timeout=30)
     monkeypatch.setattr(subprocess, "run", boom)
     out = structural_search.invoke({"pattern": "$X", "repo_path": "/repo"})
     assert "timeout" in out.lower() or "timed out" in out.lower()
