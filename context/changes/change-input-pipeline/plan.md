@@ -184,10 +184,11 @@ pass `base_ref=None` (heuristic-only) so the phase is independently testable.
 
 **File**: `tests/test_diff.py` (NEW)
 
-**Intent**: Cover base-resolution, capping, and the degrade path. Use the
-existing `tests/fixtures/sample-repo` git fixture (or a tmp git repo built via
-`gitpython` in the test) — do NOT depend on `./target-o-meter` (that's manual
-verification only).
+**Intent**: Cover base-resolution, capping, and the degrade path. NOTE:
+`tests/fixtures/sample-repo` is plain files (no `.git`) — it is NOT a usable
+git fixture, so build a tmp git repo via `gitpython` in the test (commit a
+base, branch off, add a change) to exercise `compute_diff` against a real
+base. Do NOT depend on `./target-o-meter` (that's manual verification only).
 
 **Contract**: Assert (a) `compute_diff` returns a non-empty string with
 `diff --git` when given a repo with a real base; (b) a diff larger than
@@ -311,7 +312,10 @@ requirement) and enforce it host-side — the load-bearing check, since prompts
 are unreliable.
 
 **Contract**: Replace `_MAX_REPORTED = 10` (`agent/nodes.py:54`) with
-`MAX_FINDINGS_PER_DIMENSION: int = 5`. Rewrite the capping in `report()`
+`MAX_FINDINGS_PER_DIMENSION: int = 5`, defined ABOVE `_SYSTEM_PROMPT`
+(lines 31-47) — NOT at line 54 — because 3.2 splices the constant into the
+module-level prompt string (evaluated at import time; defining it at line 54
+would raise `NameError`). Rewrite the capping in `report()`
 (`agent/nodes.py:161-162`): after sorting `ordered` by severity, group by
 `Finding.dimension`, keep the first `MAX_FINDINGS_PER_DIMENSION` of each group,
 flatten preserving the severity order. The cap feeds the `findings_out` list
@@ -515,6 +519,10 @@ inputs = {
 }
 report = run_review(config, inputs)
 if config.post_to_github:
+    # mypy can't narrow Optional fields through the `post_to_github` property;
+    # both are guaranteed non-None here — narrow explicitly so the typed
+    # post_comment call passes `uv run mypy src`.
+    assert config.pr_number is not None and config.github_token is not None
     try:
         owner, _, repo_name = (config.github_repository or "").partition("/")
         post_comment(owner=owner, repo=repo_name, pr_number=config.pr_number,
@@ -840,9 +848,10 @@ manual testing was successful before proceeding to the next phase.
 #### Automated
 
 - [ ] 6.1 `make check` clean; workflow yaml parses (`yaml.safe_load` / `actionlint`)
-- [ ] 6.2 `SMOKE=1 OPENROUTER_API_KEY=… make llm-test` green incl. new consumer smoke test
+- [ ] 6.2 `make test` unaffected — new consumer smoke test skipped without `SMOKE=1`
+- [ ] 6.3 `SMOKE=1 OPENROUTER_API_KEY=… make llm-test` green incl. new consumer smoke test
 
 #### Manual
 
-- [ ] 6.3 Push to `feature/test-pull-request` on `./target-o-meter` → `review` workflow posts the comment; workflow exits green even when findings flagged
-- [ ] 6.4 Re-run with `OPENROUTER_API_KEY` unset → step fails fast (before work); no broken comment posted
+- [ ] 6.4 Push to `feature/test-pull-request` on `./target-o-meter` → `review` workflow posts the comment; workflow exits green even when findings flagged
+- [ ] 6.5 Re-run with `OPENROUTER_API_KEY` unset → step fails fast (before work); no broken comment posted
