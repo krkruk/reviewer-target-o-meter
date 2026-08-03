@@ -553,13 +553,13 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [ ] 1.1 `make check` (ruff + mypy) passes
-- [ ] 1.2 `make test` (unit tests, `-m "not smoke"`) passes
+- [x] 1.1 `make check` (ruff + mypy) passes
+- [x] 1.2 `make test` (unit tests, `-m "not smoke"`) passes
 
 #### Manual
 
-- [ ] 1.3 `grep -rn '\bsg\b' src/` returns no hits
-- [ ] 1.4 `ast-grep run --json=compact -p '$X + $Y' <file>` returns match JSON locally
+- [x] 1.3 `grep -rn '\bsg\b' src/` returns no hits
+- [x] 1.4 `ast-grep run --json=compact -p '$X + $Y' <file>` returns match JSON locally
 
 ### Phase 2: Tests — update `test_tools.py` `sg` references
 
