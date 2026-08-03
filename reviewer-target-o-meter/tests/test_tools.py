@@ -89,7 +89,7 @@ def test_structural_search_returns_stdout(monkeypatch: pytest.MonkeyPatch) -> No
     calls = _patch_subprocess(monkeypatch, stdout=b"src/app.py:10:match\n")
     out = structural_search.invoke({"pattern": "$X + $Y", "repo_path": "/repo"})
     assert "src/app.py:10" in out
-    # Pin the binary name: the cmd list must invoke ast-grep, not the deprecated sg alias.
+    # Pin the binary name: the cmd list must invoke ast-grep, not its deprecated alias.
     assert calls[0][0][0] == "ast-grep"
 
 

@@ -576,24 +576,24 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [x] 3.1 `grep` sweep over `integration/github-actions-review.yml AGENTS.md README.md` returns no runtime-binary `sg` hits
-- [x] 3.2 Workflow YAML still parses
+- [x] 3.1 `grep` sweep over `integration/github-actions-review.yml AGENTS.md README.md` returns no runtime-binary `sg` hits — 86cc524
+- [x] 3.2 Workflow YAML still parses — 86cc524
 
 #### Manual
 
-- [x] 3.3 Read updated §f recipe top-to-bottom — `app-` prefix NOTE intact, install target is `ast-grep`
+- [x] 3.3 Read updated §f recipe top-to-bottom — `app-` prefix NOTE intact, install target is `ast-grep` — 86cc524
 
 ### Phase 4: Verification — full test run incl. live LLM smoke
 
 #### Automated
 
-- [ ] 4.1 `make check` — ruff + mypy pass
-- [ ] 4.2 `make test` — unit suite (excl. smoke) passes
-- [ ] 4.3 `make llm-test` — live-LLM smoke set passes (real `ast-grep` binary exercised end-to-end)
+- [x] 4.1 `make check` — ruff + mypy pass
+- [x] 4.2 `make test` — unit suite (excl. smoke) passes
+- [x] 4.3 `make llm-test` — live-LLM smoke set passes (real `ast-grep` binary exercised end-to-end)
 
 #### Manual
 
-- [ ] 4.4 Final sweep: `grep -rn ... '\bsg\b' .` clean for production/test/integration/top-level docs (archive excluded)
+- [x] 4.4 Final sweep: `grep -rn ... '\bsg\b' .` clean for production/test/integration/top-level docs (archive excluded)
 
 ### Phase 5: Consumer GHA smoke — end-to-end via a real PR on `../target-o-meter`
 
