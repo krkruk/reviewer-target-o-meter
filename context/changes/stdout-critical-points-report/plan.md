@@ -779,12 +779,12 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Automated
 
-- [x] 3.1 `make test` unaffected (new smoke skipped without `SMOKE=1`)
-- [x] 3.2 `make check` clean on new `tests/test_smoke_signal.py`
+- [x] 3.1 `make test` unaffected (new smoke skipped without `SMOKE=1`) — ce16373
+- [x] 3.2 `make check` clean on new `tests/test_smoke_signal.py` — ce16373
 - [x] 3.3 `SMOKE=1 OPENROUTER_API_KEY=… make llm-test` green: targeted defects
       flagged with specific anchors/keywords AND correct `dimension`; negative
       control exits 0; diff-scoping guard holds via the set-difference assertion
-      (no finding anchored off the diff's changed-files / planned-missing set)
+      (no finding anchored off the diff's changed-files / planned-missing set) — ce16373
 
 #### Manual
 
