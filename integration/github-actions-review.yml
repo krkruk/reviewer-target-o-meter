@@ -1,0 +1,73 @@
+# reviewer-target-o-meter — drop-in GitHub Actions review workflow (template).
+#
+# Copy this file into the CONSUMER repo as .github/workflows/review.yml. It fires
+# on the consumer's pull_requests, checks out the PR with full history (merge-base
+# needs it), installs the tool + ast-grep, maps the PR env vars from contexts/
+# secrets, and runs the reviewer. The tool's advisory exit + internal degrade
+# guarantee the step never fails CI on the tool's own output (FR-008).
+#
+# Required secret in the consumer repo: OPENROUTER_API_KEY.
+# GITHUB_TOKEN is auto-provided by the runner. See integration/README.md.
+
+name: review
+
+on:
+  pull_request:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # The default GITHUB_TOKEN is read-only on most repos; the reviewer needs
+    # pull-requests: write to post its comment. Declare permissions explicitly
+    # (least privilege) so the token can post the PR comment.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR (full history for merge-base)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install reviewer-target-o-meter
+        # TODO: switch to `uv tool install reviewer-target-o-meter` once the tool
+      # is published to PyPI. Until then, install from a git URL. The package's
+      # pyproject.toml lives in the nested reviewer-target-o-meter/ subdir (not the
+      # git root), so the #subdirectory= fragment is REQUIRED.
+      #
+      # NOTE: installs from the repo's DEFAULT branch (master). The PR-posting
+      # path lands in feature/change-input-pipeline; until that merges to master,
+      # the installed tool runs in stdout mode (no comment posted). Point at a
+      # branch/tag with `@<ref>` to pick up unreleased code, e.g.:
+      #   git+https://github.com/krkruk/reviewer-target-o-meter@feature/change-input-pipeline#subdirectory=reviewer-target-o-meter
+        run: |
+          uv tool install "git+https://github.com/krkruk/reviewer-target-o-meter#subdirectory=reviewer-target-o-meter"
+
+      - name: Install ast-grep (structural_search tool)
+        run: |
+          # If sg is unavailable at runtime, structural_search degrades to an
+          # error string pointing the model at text_search — the pipeline still
+          # runs (degrade philosophy). Asset name carries an `app-` prefix.
+          curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o sg.zip
+          unzip sg.zip && install -m 0755 ast-grep /usr/local/bin/sg
+
+      - name: Run reviewer-target-o-meter
+        # The tool's exit code is ADVISORY (FR-008): 1 = findings flagged, 0 =
+        # clean. GHA treats any non-zero exit as a step failure, so without
+        # continue-on-error a flagged review (the normal case) would fail CI —
+        # the opposite of "never blocks a merge". The tool's own degrade logic
+        # handles real errors (missing key fails fast and SHOULD fail this step).
+        continue-on-error: true
+        env:
+          # LLM provider (REQUIRED) — set this secret in the consumer repo.
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # PR mapping — PR_NUMBER/GITHUB_TOKEN are NOT default runner env vars.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # These three are auto-provided by the runner on pull_request events;
+          # they flow through without explicit mapping.
+          # GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_BASE_REF
+        run: reviewer-target-o-meter "${{ github.workspace }}"

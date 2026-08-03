@@ -147,8 +147,11 @@ Recorded here so S-02 doesn't re-discover it:
   run: |
     # Option A: cargo (needs Rust toolchain)
     cargo install ast-grep
-    # Option B: download the prebuilt binary
-    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/x86_64-unknown-linux-gnu.zip -o sg.zip
+    # Option B: download the prebuilt binary. NOTE: the asset carries an `app-`
+    # prefix (app-x86_64-unknown-linux-gnu.zip), NOT x86_64-unknown-linux-gnu.zip
+    # — the unprefixed URL 404s and breaks the step (verified on the consumer
+    # GHA run, 2026-08-03).
+    curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o sg.zip
     unzip sg.zip && install -m 0755 ast-grep /usr/local/bin/sg
 ```
 

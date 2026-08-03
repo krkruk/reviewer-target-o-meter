@@ -3,7 +3,7 @@ project: reviewer-target-o-meter
 version: 1
 status: draft                    # draft | active | locked
 created: 2026-08-01
-updated: 2026-08-01
+updated: 2026-08-03
 prd_version: 1
 main_goal: speed                 # ship the must-have path to the 2026-08-29 deadline; park the rest
 top_blocker: capacity            # solo + after-hours + 4 weeks + 11 must-have FRs + unfamiliar agent stack
@@ -30,7 +30,7 @@ A developer assigned to review pull requests must judge — under time pressure,
 | ID | Change ID | Outcome (user can …) | Prerequisites | PRD refs | Status |
 |---|---|---|---|---|---|
 | F-01 | agent-runtime-finding-schema | (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place | — | FR-006, FR-009, FR-011 (scaffold) | done |
-| F-02 | change-input-pipeline | (foundation) the tool accepts a checked-out directory, discovers the target branch, computes a capped diff, and loads repo context | — | FR-002, FR-004, FR-005 (scaffold) | ready |
+| F-02 | change-input-pipeline | (foundation) the tool accepts a checked-out directory, discovers the target branch, computes a capped diff, and loads repo context | — | FR-002, FR-004, FR-005 (scaffold) | done |
 | S-01 | stdout-critical-points-report | run the tool on a checked-out change and get a structured JSON critical-points report to stdout, with file/line anchors and an advisory exit code | F-01, F-02 | US-01, FR-001, FR-002, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011 | proposed |
 | S-02 | github-review-posting | open a PR and see the findings posted automatically as a GitHub Review with inline, jump-to-location annotations (advisory exit) | S-01 | US-01, FR-001, FR-003, FR-007, FR-008, FR-009 | blocked |
 
@@ -75,7 +75,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - Diff cap size and segmentation strategy (per-file? by hunk? by changed-lines budget?) (PRD OQ "Diff cap policy") — Owner: user. Block: no (planning picks a strategy within the context budget).
   - How the target branch is determined with no PR number passed as input (CI env var? `git merge-base`? default-branch name?) (PRD OQ "Target-branch / diff-base discovery") — Owner: user. Block: no (planning picks a heuristic).
 - **Risk:** Kept as a foundation (not folded into S-01) because it is consumed by both downstream slices and carries two load-bearing input-policy decisions; splitting it out keeps S-01 focused on analysis + output rather than cramming the entire workflow into one unplannable unit.
-- **Status:** ready
+- **Status:** done
 
 ## Slices
 
@@ -143,3 +143,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 ## Done
 
 - **F-01: (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place** — Archived 2026-08-01 → `context/archive/2026-08-01-agent-runtime-finding-schema/`. Lesson: —.
+- **F-02: (foundation) the tool accepts a checked-out project directory as its sole input, discovers the target branch to diff against, computes a capped/segmented diff from local git history, and loads the repo's review context (AGENTS.md, skills, source) — emitting a prepared (diff, context) the analysis consumes. No findings are produced yet.** — Archived 2026-08-03 → `context/archive/2026-08-03-change-input-pipeline/`. Lesson: —.

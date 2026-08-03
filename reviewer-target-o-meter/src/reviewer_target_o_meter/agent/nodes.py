@@ -6,8 +6,9 @@
   structured LLM + the two search tools. F-01 gives it a MINIMAL analysis prompt;
   the full impl-review methodology is S-01.
 - ``report`` — deterministic; re-validates the agent payload (the load-bearing
-  host-side check), injects ``F{n}`` ids, sorts by severity, caps at 10, computes
-  the advisory exit code, and emits remaining budget.
+  host-side check), injects ``F{n}`` ids, sorts by severity, caps at
+  ``MAX_FINDINGS_PER_DIMENSION`` per dimension, computes the advisory exit code,
+  and emits remaining budget.
 """
 
 from __future__ import annotations
@@ -21,14 +22,20 @@ from langchain.messages import HumanMessage
 from pydantic import ValidationError
 
 from ..config import Config
-from ..findings import FindingsReport, Severity
+from ..findings import Finding, FindingsReport, Severity
 from ..provider import build_llm
 from ..state import ReviewState
 from .tools import structural_search, text_search
 
+# Per-dimension findings cap (F-02). Defined ABOVE _SYSTEM_PROMPT because 3.2
+# splices it into the prompt string (evaluated at import time). Enforced BOTH
+# in the prompt (so the model prioritizes within each dimension) AND host-side
+# in report() (the load-bearing backstop — prompts are unreliable).
+MAX_FINDINGS_PER_DIMENSION: int = 5
+
 # Minimal system prompt — sufficient only to exercise F-01's smoke. The full
 # impl-review methodology (3 dimensions, grading, finding grammar) lands in S-01.
-_SYSTEM_PROMPT = """\
+_SYSTEM_PROMPT = f"""\
 You are a non-interactive code reviewer embedded in an automated pipeline.
 
 Your job: read the provided diff (plus any context and plan) and emit a
@@ -44,6 +51,8 @@ Rules:
 - NEVER edit files, post comments, or ask questions.
 - Use the search tools only to confirm a concern; do not explore aimlessly.
 - If `plan` is provided, prefer plan-relevant checks; if absent, skip plan-dependent checks.
+- Emit at most {MAX_FINDINGS_PER_DIMENSION} findings per dimension. Prioritize the
+  highest-severity, highest-impact concern within each dimension before lower ones.
 """
 
 _SEVERITY_ORDER = {
@@ -51,7 +60,6 @@ _SEVERITY_ORDER = {
     Severity.WARNING: 1,
     Severity.OBSERVATION: 2,
 }
-_MAX_REPORTED = 10
 
 
 def context_load(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
@@ -159,15 +167,36 @@ def report(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
         report_obj = FindingsReport(findings=[], summary="WARNING: report re-validation failed.")
 
     ordered = sorted(report_obj.findings, key=lambda f: (_SEVERITY_ORDER[f.severity], f.file, f.line))
-    findings_out = [f.model_dump() for f in ordered[:_MAX_REPORTED]]
+    capped = _cap_per_dimension(ordered)
+    findings_out = [f.model_dump() for f in capped]
 
     return {
         "findings": findings_out,
         "summary": report_obj.summary,
         "overall_verdict": report_obj.overall_verdict,
         "exit_code": report_obj.exit_code,
-        "report": report_obj.model_copy(update={"findings": ordered[:_MAX_REPORTED]}),
+        "report": report_obj.model_copy(update={"findings": capped}),
     }
+
+
+def _cap_per_dimension(ordered: list[Finding]) -> list[Finding]:
+    """Keep the first ``MAX_FINDINGS_PER_DIMENSION`` per dimension, preserving
+    the input (severity-first) order across the flattened result.
+
+    ``ordered`` is already sorted by severity (then file/line); we walk it once
+    and count per dimension, dropping anything past the cap. This keeps the
+    severity ordering intact within AND across dimensions while enforcing the
+    per-dimension bound (trust-but-verify for the prompt instruction).
+    """
+    kept: list[Finding] = []
+    seen_per_dim: dict[str, int] = {}
+    for finding in ordered:
+        dim = finding.dimension.value
+        if seen_per_dim.get(dim, 0) >= MAX_FINDINGS_PER_DIMENSION:
+            continue
+        seen_per_dim[dim] = seen_per_dim.get(dim, 0) + 1
+        kept.append(finding)
+    return kept
 
 
 __all__ = ["build_checks_node", "context_load", "plan_discovery", "report"]
