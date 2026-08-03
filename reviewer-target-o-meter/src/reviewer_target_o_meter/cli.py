@@ -24,6 +24,7 @@ from .context_loader import load_context
 from .diff import compute_diff
 from .github import post_comment, render_comment
 from .graph import run_review
+from .plan_loader import load_plan
 
 app = typer.Typer(add_completion=False, help="Reviewer-target-o-meter: analyze a checkout and emit a FindingsReport.")
 
@@ -41,11 +42,15 @@ def review(
     """
     config = Config.from_env()  # raises with a clear message if OPENROUTER_API_KEY is missing
 
+    # Compute the diff once and feed it to both plan discovery and the graph —
+    # don't diff twice. load_plan is None-tolerant (no plan discoverable → the
+    # prompt's plan-tolerance kicks in; FR-006).
+    diff = compute_diff(repo_path, base_ref=config.base_ref)
     inputs: dict[str, object] = {
         "repo_path": str(repo_path),
-        "diff": compute_diff(repo_path, base_ref=config.base_ref),
+        "diff": diff,
         "context": load_context(repo_path),
-        "plan": None,            # unchanged — real plan discovery is S-01
+        "plan": load_plan(repo_path, diff),
         "findings": [],
     }
     report = run_review(config, inputs)
@@ -84,21 +89,6 @@ def _emit_stdout(report) -> None:
         _finding["id"] = f"F{i}"
     payload["exit_code"] = report.exit_code
     typer.echo(json.dumps(payload, indent=2, default=str))
-
-
-# Minimal fixture diff (the real fixture lives in tests/fixtures/). Kept inline so
-# the CLI is self-contained for the Phase-3 smoke; F-02 replaces this with a real
-# diff computed from the checkout.
-_FIXTURE_DIFF = """\
---- a/src/app.py
-+++ b/src/app.py
-@@ -1,3 +1,5 @@
- def query(user_id):
--    sql = "SELECT * FROM users WHERE id = " + user_id
-+    # NOTE: user_id is attacker-controlled
-+    sql = "SELECT * FROM users WHERE id = " + user_id
-+    return run(sql)
-"""
 
 
 def main() -> None:

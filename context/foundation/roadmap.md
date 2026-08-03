@@ -31,7 +31,7 @@ A developer assigned to review pull requests must judge — under time pressure,
 |---|---|---|---|---|---|
 | F-01 | agent-runtime-finding-schema | (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place | — | FR-006, FR-009, FR-011 (scaffold) | done |
 | F-02 | change-input-pipeline | (foundation) the tool accepts a checked-out directory, discovers the target branch, computes a capped diff, and loads repo context | — | FR-002, FR-004, FR-005 (scaffold) | done |
-| S-01 | stdout-critical-points-report | run the tool on a checked-out change and get a structured JSON critical-points report to stdout, with file/line anchors and an advisory exit code | F-01, F-02 | US-01, FR-001, FR-002, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011 | proposed |
+| S-01 | stdout-critical-points-report | run the tool on a checked-out change and get a structured JSON critical-points report to stdout, with file/line anchors and an advisory exit code | F-01, F-02 | US-01, FR-001, FR-002, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011 | done |
 | S-02 | github-review-posting | open a PR and see the findings posted automatically as a GitHub Review with inline, jump-to-location annotations (advisory exit) | S-01 | US-01, FR-001, FR-003, FR-007, FR-008, FR-009 | blocked |
 
 ## Baseline
@@ -90,7 +90,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - The analysis follows an established implementation-review methodology (plan discovery, drift/safety/pattern checks); its specific provenance / any reuse of an existing review checklist is undecided (PRD OQ "Critical-point analysis methodology provenance") — Owner: user. Block: no (planning adopts the methodology shape already described in FR-006; provenance is a citation, not a blocker).
 - **Risk:** This slice references most of the must-have FRs, which is justified because the PRD has exactly one user-visible workflow (US-01) — the review of a single change. The split from S-02 is by delivery mode (local stdout vs. in-PR posting), a genuine user-visible distinction, not a technical-layer split. The load-bearing risk is signal quality: if the agent's critical points are generic or low-signal, the whole product hypothesis fails, so this is sequenced immediately after its two foundations rather than after the host-integration work.
-- **Status:** proposed
+- **Status:** done
 
 ### S-02: GitHub Review posting (in-PR, inline annotations)
 
@@ -144,3 +144,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 - **F-01: (foundation) reviewer agent runtime, typed Finding/Severity schema, and OpenRouter provider wiring in place** — Archived 2026-08-01 → `context/archive/2026-08-01-agent-runtime-finding-schema/`. Lesson: —.
 - **F-02: (foundation) the tool accepts a checked-out project directory as its sole input, discovers the target branch to diff against, computes a capped/segmented diff from local git history, and loads the repo's review context (AGENTS.md, skills, source) — emitting a prepared (diff, context) the analysis consumes. No findings are produced yet.** — Archived 2026-08-03 → `context/archive/2026-08-03-change-input-pipeline/`. Lesson: —.
+- **S-01: user can run `reviewer-target-o-meter <checked-out-dir>` locally and receive a structured JSON report of critical-point findings to standard output — each finding carrying a file/line anchor, severity, and rationale — with an advisory exit code; plan-tolerant (skips plan-dependent checks when no plan.md exists) and graceful (degrades to a diff-based review when repo context is absent).** — Archived 2026-08-03 → `context/archive/2026-08-03-stdout-critical-points-report/`. Lesson: —.
