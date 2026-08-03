@@ -11,12 +11,19 @@ that defect against the base is exactly what ``compute_diff`` feeds the agent,
 and the model is expected to surface the planted issue — proving the input
 pipeline (real diff, not the inline fixture) drives a correct review.
 
+The Phase 5 test goes one level higher: it launches the actual CLI as a
+subprocess (the real console-script entrypoint) over a buggy checkout, proving
+the env-driven mode switch + stdout path work end-to-end.
+
 Run via ``make llm-test`` (``SMOKE=1``); never in default CI.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import git
@@ -347,3 +354,54 @@ def test_render_comment_renders_live_findings_as_valid_markdown(tmp_path: Path) 
     assert any(
         kw in blob for kw in ("sql", "injection", "concat", "interpolat", "user input", "untrusted")
     ), f"planted SQLi not reflected in rendered comment: {blob!r}"
+
+
+def test_cli_subprocess_emits_valid_stdout_report_without_pr_env(tmp_path: Path) -> None:
+    """Phase 5 manual check 5.4, automated: launching the actual CLI as a
+    subprocess (the real console entrypoint) over a buggy checkout, with NO PR
+    env vars, emits a valid FindingsReport JSON to stdout and exits advisory.
+
+    This is the highest-fidelity system check short of posting to a real PR: it
+    exercises Config.from_env → compute_diff → load_context → the live agent →
+    report → _emit_stdout exactly as a user invoking ``make run DIR=...`` does.
+    The planted SQLi must appear in the emitted findings.
+    """
+    pytest.importorskip("reviewer_target_o_meter")  # sanity
+    repo_path = _build_buggy_repo(tmp_path)
+
+    # Run the installed console script with a clean PR env so stdout mode is
+    # selected. The OpenRouter key is passed through (set by the smoke harness).
+    env = {k: v for k, v in os.environ.items() if k.startswith(("OPENROUTER_", "MODEL", "PATH", "HOME", "LANG", "LC_"))}
+    # Ensure NO PR env — stdout mode.
+    for var in ("PR_NUMBER", "GITHUB_TOKEN", "GITHUB_REPOSITORY", "GITHUB_BASE_REF", "BASE_REF"):
+        env.pop(var, None)
+
+    # check=False is explicit: the CLI's advisory exit is 0 or 1 (both valid);
+    # we assert returncode explicitly below rather than letting check= raise.
+    result = subprocess.run(
+        ["reviewer-target-o-meter", str(repo_path)],
+        capture_output=True, text=True, env=env, timeout=180, check=False,
+    )
+
+    assert result.returncode in (0, 1), (
+        f"CLI exited {result.returncode}; stderr={result.stderr!r}"
+    )
+    payload = json.loads(result.stdout)  # raises if not valid JSON
+    assert "findings" in payload and "exit_code" in payload
+    assert payload["exit_code"] == result.returncode  # advisory code matches
+
+    # The planted SQLi is reflected in the emitted findings.
+    if payload["findings"]:
+        blob = " ".join(
+            (f.get("title", "") + " " + f.get("detail", "")).lower()
+            for f in payload["findings"]
+        )
+        assert any(
+            kw in blob for kw in ("sql", "injection", "concat", "interpolat", "user input", "untrusted")
+        ), f"planted SQLi not reflected in CLI findings: {blob!r}"
+        # F{n} ids are injected during stdout serialization.
+        assert payload["findings"][0].get("id") == "F1"
+    else:
+        # A clean exit with no findings is still valid, but for this planted
+        # SQLi the model should flag at least one — surface it loudly.
+        pytest.fail(f"live CLI returned no findings for the planted SQLi; payload={payload!r}")

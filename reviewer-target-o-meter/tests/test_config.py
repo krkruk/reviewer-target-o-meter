@@ -51,3 +51,72 @@ def test_config_is_frozen(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = Config.from_env()
     with pytest.raises(ValidationError):
         cfg.model = "other"  # type: ignore[misc]
+
+
+# --- Phase 5: env-driven mode switch (post_to_github) -------------------------
+
+
+def _set_pr_env(monkeypatch: pytest.MonkeyPatch, *, pr: str | None = "7", token: str | None = "tok", repo: str | None = "owner/repo") -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    for var, val in (("PR_NUMBER", pr), ("GITHUB_TOKEN", token), ("GITHUB_REPOSITORY", repo)):
+        if val is None:
+            monkeypatch.delenv(var, raising=False)
+        else:
+            monkeypatch.setenv(var, val)
+
+
+def test_post_to_github_true_when_all_three_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_pr_env(monkeypatch)
+    cfg = Config.from_env()
+    assert cfg.pr_number == 7
+    assert cfg.github_repository == "owner/repo"
+    assert cfg.post_to_github is True
+
+
+def test_post_to_github_false_when_pr_number_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_pr_env(monkeypatch, pr=None)
+    assert Config.from_env().post_to_github is False
+
+
+def test_post_to_github_false_when_token_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_pr_env(monkeypatch, token=None)
+    assert Config.from_env().post_to_github is False
+
+
+def test_post_to_github_false_when_repository_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_pr_env(monkeypatch, repo=None)
+    assert Config.from_env().post_to_github is False
+
+
+def test_post_to_github_false_when_pr_number_non_integer(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A non-integer PR_NUMBER parses to None (forgiving) + a WARNING; the
+    # switch stays False rather than crashing the pipeline.
+    _set_pr_env(monkeypatch, pr="not-a-number")
+    cfg = Config.from_env()
+    assert cfg.pr_number is None
+    assert cfg.post_to_github is False
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "PR_NUMBER" in err
+
+
+def test_config_reads_base_ref_and_api_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.setenv("BASE_REF", "develop")
+    monkeypatch.setenv("GITHUB_API_URL", "https://gh.example/api")
+    cfg = Config.from_env()
+    assert cfg.base_ref == "develop"
+    assert cfg.github_api_url == "https://gh.example/api"
+
+
+def test_github_token_never_in_repr(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_pr_env(monkeypatch, token="sk-secret-tok")
+    cfg = Config.from_env()
+    assert "sk-secret-tok" not in repr(cfg)
+
+
+def test_base_ref_defaults_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    monkeypatch.delenv("BASE_REF", raising=False)
+    assert Config.from_env().base_ref is None
