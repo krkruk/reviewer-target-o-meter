@@ -1,10 +1,10 @@
 ---
 change_id: change-input-pipeline
 title: Change input pipeline: directory to capped diff plus loaded context
-status: impl_reviewed
+status: archived
 created: 2026-08-03
 updated: 2026-08-03
-archived_at: null
+archived_at: 2026-08-03T18:56:30Z
 ---
 
 ## Notes
