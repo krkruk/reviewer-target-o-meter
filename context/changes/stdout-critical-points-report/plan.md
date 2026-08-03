@@ -763,9 +763,9 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Automated
 
-- [ ] 2.1 `make test` green incl. new `tests/test_plan_loader.py` (discovery
+- [x] 2.1 `make test` green incl. new `tests/test_plan_loader.py` (discovery
       chain, cap, archive exclusion, degrade, no-plan.md-dir → None)
-- [ ] 2.2 `make check` clean on new `src/reviewer_target_o_meter/plan_loader.py`
+- [x] 2.2 `make check` clean on new `src/reviewer_target_o_meter/plan_loader.py`
       + the `cli.py` edit
 
 #### Manual
