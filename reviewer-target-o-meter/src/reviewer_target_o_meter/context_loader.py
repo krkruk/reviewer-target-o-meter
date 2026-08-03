@@ -21,8 +21,9 @@ visible marker so the model is never silently fed a truncation.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+
+from ._util import warn as _warn
 
 # Module constant (NOT env-driven in v1). Bounds the checks-node prompt.
 MAX_CONTEXT_CHARS = 8_000
@@ -90,11 +91,6 @@ def _cap(text: str) -> str:
         return text
     remaining = len(text) - MAX_CONTEXT_CHARS
     return text[:MAX_CONTEXT_CHARS] + _TRUNCATION_MARKER.format(remaining=remaining)
-
-
-def _warn(message: str) -> None:
-    """Write a one-line ``WARNING: ...`` to stderr (degrade convention)."""
-    print(f"WARNING: {message}", file=sys.stderr)
 
 
 __all__ = ["MAX_CONTEXT_CHARS", "load_context"]

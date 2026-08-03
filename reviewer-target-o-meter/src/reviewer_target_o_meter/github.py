@@ -128,10 +128,14 @@ def _post(client: httpx.Client, url: str, headers: dict[str, str], body: str) ->
 
 
 def _file_cell(file: str, line: int, repo: str | None) -> str:
-    """Render the File:Line cell: a source link when ``repo`` is known, else a
-    plain backtick path (v1 omits the SHA — plain backtick is the safe default)."""
-    if repo:
-        return f"[{file}:{line}](https://github.com/{repo}/blob/HEAD/{file}#L{line})"
+    """Render the File:Line cell as a plain backtick path.
+
+    v1 omits the source link on purpose: ``/blob/HEAD/`` dereferences the repo's
+    default branch on github.com, not the reviewed PR merge commit, so a link
+    would point at a version of the file where a PR-added line may not exist.
+    The plain backtick is the safe v1 default (plan §4.2); SHA threading is a
+    follow-up.
+    """
     return f"`{file}:{line}`"
 
 

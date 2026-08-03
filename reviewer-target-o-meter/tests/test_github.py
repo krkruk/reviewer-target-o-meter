@@ -86,11 +86,13 @@ def test_render_comment_file_cell_uses_backticks_when_repo_unknown() -> None:
     assert "https://github.com/" not in md
 
 
-def test_render_comment_file_cell_links_when_repo_known() -> None:
+def test_render_comment_file_cell_uses_backticks_even_when_repo_known() -> None:
     md = render_comment(_flagged_report(), repo="owner/repo")
-    # A blob link to the source line is rendered when the repo is known.
-    assert "https://github.com/owner/repo/blob/" in md
-    assert "#L3" in md
+    # v1 omits the source link on purpose: /blob/HEAD/ points at the default
+    # branch, not the reviewed PR, so it would 404 for PR-added lines. The
+    # plain backtick is the safe default until SHA threading lands.
+    assert "`src/app.py:3`" in md
+    assert "https://github.com/" not in md
 
 
 # --- post_comment: offline via MockTransport ----------------------------------

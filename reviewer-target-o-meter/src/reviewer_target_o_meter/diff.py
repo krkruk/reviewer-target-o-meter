@@ -14,7 +14,6 @@ fed a truncation.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from git import Repo
@@ -25,6 +24,8 @@ from git.exc import (
     NoSuchPathError,
 )
 from gitdb.exc import BadName, BadObject
+
+from ._util import warn as _warn
 
 # Module constant (NOT env-driven in v1). Matches the tool-output cap in AGENTS.md §b.
 MAX_DIFF_CHARS = 20_000
@@ -113,11 +114,6 @@ def _cap(raw: str) -> str:
     cut = boundary if boundary != -1 else MAX_DIFF_CHARS
     remaining = len(raw) - cut
     return raw[:cut] + _TRUNCATION_MARKER.format(remaining=remaining)
-
-
-def _warn(message: str) -> None:
-    """Write a one-line ``WARNING: ...`` to stderr (degrade convention)."""
-    print(f"WARNING: {message}", file=sys.stderr)
 
 
 __all__ = ["MAX_DIFF_CHARS", "compute_diff"]

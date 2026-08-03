@@ -18,6 +18,7 @@ from pathlib import Path
 
 import typer
 
+from ._util import warn as _warn
 from .config import Config
 from .context_loader import load_context
 from .diff import compute_diff
@@ -62,7 +63,11 @@ def review(
                 body=render_comment(report, repo=config.github_repository),
             )
         except Exception as exc:  # noqa: BLE001 — degrade: any posting failure must fall back to stdout, never fail CI (FR-008)
-            _warn(f"posting failed; falling back to stdout ({exc})")
+            # Log only the exception type, never str(exc) — a broad `except Exception`
+            # forwarding the message verbatim risks leaking the Authorization header
+            # if a future transport/log change puts it in the exception text
+            # (AGENTS.md §d: key read at runtime only, never echoed).
+            _warn(f"posting failed; falling back to stdout ({type(exc).__name__})")
             _emit_stdout(report)
             sys.exit(report.exit_code)
         sys.exit(report.exit_code)  # advisory, even after a successful post
@@ -79,11 +84,6 @@ def _emit_stdout(report) -> None:
         _finding["id"] = f"F{i}"
     payload["exit_code"] = report.exit_code
     typer.echo(json.dumps(payload, indent=2, default=str))
-
-
-def _warn(message: str) -> None:
-    """Write a one-line ``WARNING: ...`` to stderr (degrade convention)."""
-    print(f"WARNING: {message}", file=sys.stderr)
 
 
 # Minimal fixture diff (the real fixture lives in tests/fixtures/). Kept inline so

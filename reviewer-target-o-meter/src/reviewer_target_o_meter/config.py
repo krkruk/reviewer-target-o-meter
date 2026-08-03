@@ -8,10 +8,11 @@ free-tier withdrawal is a one-line change (research.md:567).
 from __future__ import annotations
 
 import os
-import sys
 from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from ._util import warn
 
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -107,5 +108,5 @@ def _parse_pr_number(raw: str | None) -> int | None:
     try:
         return int(raw)
     except ValueError:
-        print(f"WARNING: PR_NUMBER={raw!r} is not an integer; GitHub posting disabled.", file=sys.stderr)
+        warn(f"PR_NUMBER={raw!r} is not an integer; GitHub posting disabled.")
         return None
