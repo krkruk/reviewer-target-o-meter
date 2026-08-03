@@ -14,6 +14,7 @@ from pathlib import Path
 import typer
 
 from .config import Config
+from .context_loader import load_context
 from .diff import compute_diff
 from .graph import run_review
 
@@ -31,13 +32,14 @@ def review(
     """
     config = Config.from_env()  # raises with a clear message if OPENROUTER_API_KEY is missing
 
-    # F-02: compute the real diff from the checkout. base_ref is None here
-    # (heuristic-only) until Phase 5 wires config.base_ref through; the fixture
-    # diff is retained for system tests (reached via monkeypatching compute_diff).
+    # F-02: compute the real diff + load the real review context from the
+    # checkout. base_ref is None here (heuristic-only) until Phase 5 wires
+    # config.base_ref through; the inline fixture diff is retained for system
+    # tests (reached via monkeypatching compute_diff).
     inputs: dict[str, object] = {
         "repo_path": str(repo_path),
         "diff": compute_diff(repo_path, base_ref=None),
-        "context": None,
+        "context": load_context(repo_path),
         "plan": None,
         "findings": [],
     }
