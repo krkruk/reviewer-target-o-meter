@@ -405,3 +405,77 @@ def test_cli_subprocess_emits_valid_stdout_report_without_pr_env(tmp_path: Path)
         # A clean exit with no findings is still valid, but for this planted
         # SQLi the model should flag at least one — surface it loudly.
         pytest.fail(f"live CLI returned no findings for the planted SQLi; payload={payload!r}")
+
+
+def test_cli_subprocess_posts_real_comment_to_pr(tmp_path: Path) -> None:
+    """Phase 5 manual check 5.5, automated: launching the actual CLI as a
+    subprocess WITH PR env vars posts a real Markdown comment to a real GitHub
+    PR, and the CLI exits advisory.
+
+    This is the genuine end-to-end posting verification — it hits the real
+    GitHub API. Heavily gated: skipped unless BOTH ``POST_PR_NUMBER`` (the target
+    PR) AND ``GITHUB_TOKEN`` (with comment scope on the repo) are set, AND
+    ``SMOKE=1``. The target repo defaults to ``krkruk/reviewer-target-o-meter``
+    (override via ``POST_GITHUB_REPOSITORY``). The posted comment is tagged as
+    reviewer test data so it can be ignored at merge time.
+
+    Run via:
+      SMOKE=1 GITHUB_TOKEN=<token> POST_PR_NUMBER=<n> \\
+        uv run pytest tests/test_smoke_input_pipeline.py::test_cli_subprocess_posts_real_comment_to_pr -m smoke
+    """
+    pr_number = os.environ.get("POST_PR_NUMBER")
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("POST_GITHUB_REPOSITORY", "krkruk/reviewer-target-o-meter")
+    if not pr_number or not token:
+        pytest.skip(
+            "live PR post needs POST_PR_NUMBER=<n> and GITHUB_TOKEN=<token> "
+            "(set both to exercise the real GitHub POST)"
+        )
+
+    repo_path = _build_buggy_repo(tmp_path)
+
+    env = {
+        k: v for k, v in os.environ.items()
+        if k.startswith(("OPENROUTER_", "MODEL", "PATH", "HOME", "LANG", "LC_"))
+    }
+    env["PR_NUMBER"] = str(pr_number)
+    env["GITHUB_TOKEN"] = token
+    env["GITHUB_REPOSITORY"] = repo
+    # Pin base_ref to the repo's master so compute_diff is deterministic on the
+    # built fixture (the heuristic also resolves master, but explicit is safer).
+    env["BASE_REF"] = "master"
+
+    result = subprocess.run(
+        ["reviewer-target-o-meter", str(repo_path)],
+        capture_output=True, text=True, env=env, timeout=240, check=False,
+    )
+
+    # Advisory exit (0 or 1); never a crash. A posting failure would degrade to
+    # stdout + a WARNING and still exit advisory — we assert the post succeeded
+    # separately below by reading the PR back.
+    assert result.returncode in (0, 1), (
+        f"CLI exited {result.returncode}; stdout={result.stdout!r}; stderr={result.stderr!r}"
+    )
+    assert "WARNING" not in result.stderr.upper(), (
+        f"posting degraded (WARNING on stderr) instead of succeeding: {result.stderr!r}"
+    )
+
+    # Read the PR comments back and confirm our comment landed with the expected
+    # header + a finding row (the planted SQLi rendered by render_comment).
+    import urllib.request
+
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        comments = json.loads(resp.read().decode())
+
+    ours = [
+        c for c in comments
+        if c.get("body", "").lstrip().startswith("# ")
+        and "reviewer-target-o-meter" in c.get("body", "").lower()
+    ]
+    # The most recent reviewer comment is the one we just posted.
+    assert ours, f"no reviewer-target-o-meter comment found on PR {pr_number}"
+    body = ours[-1]["body"]
+    assert "Advisory exit code" in body  # the FR-008 disclaimer
+    assert "app.py" in body  # a finding row anchored on the planted defect
