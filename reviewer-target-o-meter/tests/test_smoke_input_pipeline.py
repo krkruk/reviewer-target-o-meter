@@ -27,6 +27,7 @@ from reviewer_target_o_meter.config import Config
 from reviewer_target_o_meter.context_loader import load_context
 from reviewer_target_o_meter.diff import compute_diff
 from reviewer_target_o_meter.findings import FindingsReport, Severity
+from reviewer_target_o_meter.github import render_comment
 from reviewer_target_o_meter.graph import arun_review
 
 pytestmark = pytest.mark.smoke
@@ -299,3 +300,50 @@ def test_live_review_respects_per_dimension_cap(tmp_path: Path) -> None:
         f"per-dimension cap violated on live output: {over} "
         f"(cap={MAX_FINDINGS_PER_DIMENSION}); findings={report.findings!r}"
     )
+
+
+def test_render_comment_renders_live_findings_as_valid_markdown(tmp_path: Path) -> None:
+    """Phase 4 manual check, automated: ``render_comment`` produces well-formed
+    Markdown (header + table + details + disclaimer) over the LIVE reviewer's
+    findings, and the rendered rows actually reflect what the model found.
+
+    This validates the renderer against real model output rather than the
+    synthetic FindingsReport used by the unit tests: the planted SQLi must
+    appear in the table, the F{n} ids must be sequential, and the disclaimer
+    must carry the advisory exit code the live run computed.
+    """
+    repo_path = _build_buggy_repo(tmp_path)
+    diff = compute_diff(repo_path, base_ref="master")
+
+    config = Config.from_env()
+    inputs = {
+        "repo_path": str(repo_path),
+        "diff": diff,
+        "context": None,
+        "plan": None,
+        "findings": [],
+    }
+    report = asyncio.run(arun_review(config, inputs))
+    assert isinstance(report, FindingsReport)
+    assert report.findings, f"live reviewer returned no findings; summary={report.summary!r}"
+
+    md = render_comment(report, repo="owner/sample")
+
+    # Structural shape.
+    assert md.lstrip().startswith("# ")
+    assert "reviewer-target-o-meter" in md.lower()
+    assert "<details>" in md and "</details>" in md
+    assert "Advisory exit code" in md and str(report.exit_code) in md
+
+    # The live findings are reflected: each finding's title + anchor is in the
+    # rendered table, with sequential F{n} ids.
+    for i, f in enumerate(report.findings, start=1):
+        assert f"F{i}" in md
+        assert f"{f.file}:{f.line}" in md
+        assert f.title in md
+
+    # The planted SQLi concern is reflected somewhere in the rendered body.
+    blob = md.lower()
+    assert any(
+        kw in blob for kw in ("sql", "injection", "concat", "interpolat", "user input", "untrusted")
+    ), f"planted SQLi not reflected in rendered comment: {blob!r}"

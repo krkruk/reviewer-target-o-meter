@@ -15,6 +15,7 @@ dependencies = [
     "pydantic",
     "typer",
     "gitpython",
+    "httpx",
 ]
 
 [project.scripts]
