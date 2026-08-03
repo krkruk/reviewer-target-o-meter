@@ -797,8 +797,8 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Automated
 
-- [ ] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green
-      (docs-only)
+- [x] 4.1 `uv run ruff check && uv run mypy src && uv run pytest` still green
+      (docs-only) — e996e7d
 
 #### Manual
 
