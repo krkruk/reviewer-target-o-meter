@@ -587,26 +587,26 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [x] 4.1 `make check` — ruff + mypy pass
-- [x] 4.2 `make test` — unit suite (excl. smoke) passes
-- [x] 4.3 `make llm-test` — live-LLM smoke set passes (real `ast-grep` binary exercised end-to-end)
+- [x] 4.1 `make check` — ruff + mypy pass — c630976
+- [x] 4.2 `make test` — unit suite (excl. smoke) passes — c630976
+- [x] 4.3 `make llm-test` — live-LLM smoke set passes (real `ast-grep` binary exercised end-to-end) — c630976
 
 #### Manual
 
-- [x] 4.4 Final sweep: `grep -rn ... '\bsg\b' .` clean for production/test/integration/top-level docs (archive excluded)
+- [x] 4.4 Final sweep: `grep -rn ... '\bsg\b' .` clean for production/test/integration/top-level docs (archive excluded) — c630976
 
 ### Phase 5: Consumer GHA smoke — end-to-end via a real PR on `../target-o-meter`
 
 #### Automated
 
-- [ ] 5.1 `feature/update-ast-grep-configuration` pushed to `origin` (Phases 1-4 landed on the branch)
-- [ ] 5.2 Consumer `review.yml` temporarily pointed at `@feature/update-ast-grep-configuration` + `ast-grep` install target, on a throwaway branch
-- [ ] 5.3 Mock-change PR opened on `../target-o-meter` (throwaway smoke trigger)
-- [ ] 5.4 `gh run list --workflow=review.yml` shows the run `success`; `gh pr view <n> --comments` shows the `github-actions[bot]` comment
+- [x] 5.1 `feature/update-ast-grep-configuration` pushed to `origin` (Phases 1-4 landed on the branch)
+- [x] 5.2 Consumer `review.yml` temporarily pointed at `@feature/update-ast-grep-configuration` + `ast-grep` install target, on a throwaway branch
+- [x] 5.3 Mock-change PR opened on `../target-o-meter` (throwaway smoke trigger)
+- [x] 5.4 `gh run list --workflow=review.yml` shows the run `success`; `gh pr view <n> --comments` shows the `github-actions[bot]` comment
 
 #### Manual
 
-- [ ] 5.5 "Install ast-grep" step log installs to `/usr/local/bin/ast-grep` (not `sg`)
-- [ ] 5.6 Run step log contains no `sg is deprecated` warning (the rename silenced it end-to-end)
-- [ ] 5.7 Posted comment shows `structural_search` produced real anchored findings (not the degrade string)
-- [ ] 5.8 Smoke PR closed without merging; consumer workflow reverted to master install URL / throwaway branch deleted
+- [x] 5.5 "Install ast-grep" step log installs to `/usr/local/bin/ast-grep` (not `sg`)
+- [x] 5.6 Run step log contains no `sg is deprecated` warning (the rename silenced it end-to-end)
+- [x] 5.7 Posted comment shows `structural_search` produced real anchored findings (not the degrade string)
+- [x] 5.8 Smoke PR closed without merging; consumer workflow reverted to master install URL / throwaway branch deleted
