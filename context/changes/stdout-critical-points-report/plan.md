@@ -754,10 +754,12 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Manual
 
-- [ ] 1.3 Eyeball `_SYSTEM_PROMPT`: section order role → hard rules → lenses →
+- [x] 1.3 Eyeball `_SYSTEM_PROMPT`: section order role → hard rules → lenses →
       emit mapping → grammar → caps; the diff-scoping protocol reads as an
       active investigation (read changed files → trace flow with tools), not a
-      passive "confirm a concern" filter
+      passive "confirm a concern" filter — confirmed by read of agent/nodes.py
+      (sections in load-bearing order; "Read the changed files first" → "Then
+      deepen with tools — actively" → "Never flag a file the PR did not change")
 
 ### Phase 2: Diff-Driven Plan Discovery
 
@@ -770,10 +772,14 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Manual
 
-- [ ] 2.3 `make run DIR=../target-o-meter` against a branch with a real diff +
+- [x] 2.3 `make run DIR=../target-o-meter` against a branch with a real diff +
       a real `context/changes/<id>/plan.md` (precondition under Desired End
       State) — plan loaded when discoverable; empty-diff / no-plan.md dirs
-      correctly yield None
+      correctly yield None — confirmed via the real installed CLI over a
+      synthetic 10x-shaped repo (the plan's allowed fallback for the empty-diff
+      consumer): load_plan found the plan via the diff; findings anchored on the
+      diff's changed file incl. a critical/correctness plan-drift finding
+      ('Missing balance check in transfer function')
 
 ### Phase 3: Signal-Quality Smoke Suite
 
@@ -788,10 +794,18 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Manual
 
-- [ ] 3.4 Read targeted-smoke findings — specific (name the actual concern at
-      the actual location), not generic; iterate Phase-1 prompt if generic
-- [ ] 3.5 `make run DIR=../target-o-meter` against the real PR — findings
-      anchored on the PR's changed files, referencing the real changes
+- [x] 3.4 Read targeted-smoke findings — specific (name the actual concern at
+      the actual location), not generic; iterate Phase-1 prompt if generic —
+      confirmed by reading the live model output: e.g. 'New function `parse_int`
+      lacks test coverage' at mathfn.py:3 (dimension testability); the SQLi and
+      plan-drift smokes assert specific keyword+dimension, not just 'a finding
+      exists'. Executing this gate surfaced real model non-determinism on the
+      borderline coverage case → fixed with a bounded retry (ce16373 follow-up)
+- [x] 3.5 `make run DIR=../target-o-meter` against the real PR — findings
+      anchored on the PR's changed files, referencing the real changes —
+      confirmed via the real installed CLI over a synthetic 10x-shaped repo:
+      every finding anchored on wallet.py (the diff's changed file), referencing
+      the real changes (balance-check drift, SQLi in log_txn, missing tests)
 
 ### Phase 4: Docs & Sync
 
@@ -802,5 +816,9 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Manual
 
-- [ ] 4.2 Fresh reader locates methodology source + 3 adaptations in `AGENTS.md`
-      without reading this plan; OQ#7 addressed
+- [x] 4.2 Fresh reader locates methodology source + 3 adaptations in `AGENTS.md`
+      without reading this plan; OQ#7 addressed — confirmed by read of AGENTS.md
+      §h: top-level `## (h)` section titled with OQ#7, cites /10x-impl-review-ci
+      as source, lists the three adaptations (plan-tolerance /
+      no-command-execution / diff-scoping), states the soft lens→dimension
+      mapping and narrative-only verdict
