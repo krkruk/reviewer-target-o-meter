@@ -43,10 +43,18 @@ _CHANGE_DOCS = ("plan.md", "frame.md", "research.md")
 
 # Match "diff --git a/context/changes/<id>/<doc>" — capture <id>. The id is any
 # path segment that stops at the next "/" (no nested change ids in the 10x shape).
+# NOTE: the `[^/]` char class is the first line of defense against path-traversal
+# — it keeps `..`/`/etc/passwd` from fitting in one capture. `_validate_change_id`
+# is the explicit second line; do not loosen one without the other.
 _CHANGE_PATH_RE = re.compile(
     r"^diff --git a/context/changes/(?P<id>[^/]+)/(?:" + "|".join(_CHANGE_DOCS) + r")\b",
     re.MULTILINE,
 )
+
+# The 10x change-id charset (matches the sess_*/change-id convention). Anything
+# outside it is rejected as a traversal / shell-metachar smell before it reaches
+# a path join. Defense-in-depth alongside the regex char class above.
+_VALID_CHANGE_ID = re.compile(r"[A-Za-z0-9._-]+")
 
 
 def load_plan(repo_path: str | Path, diff: str) -> str | None:
@@ -66,8 +74,15 @@ def load_plan(repo_path: str | Path, diff: str) -> str | None:
         return None
 
     plan_path = root / "context" / "changes" / change_id / "plan.md"
+    # Bound the read at the I/O layer so a multi-GB / hostile plan.md can't OOM
+    # the pipeline, and decode leniently so non-UTF-8 files degrade rather than
+    # raise. (UnicodeDecodeError is a ValueError, NOT an OSError — a plain
+    # `except OSError` lets it escape and crash the pipeline; MemoryError on an
+    # unbounded `read_text()` likewise. We read raw bytes up-front and decode
+    # with errors="replace".) The +200 slack lets `_cap` cut at a clean boundary.
     try:
-        text = plan_path.read_text(encoding="utf-8")
+        with plan_path.open("rb") as fh:
+            raw = fh.read(MAX_PLAN_CHARS + 200)
     except FileNotFoundError:
         # Diff-driven pointed at a change dir with no plan.md, or a single-active
         # dir whose only doc isn't plan.md — actionable enough to warn.
@@ -77,7 +92,7 @@ def load_plan(repo_path: str | Path, diff: str) -> str | None:
         _warn(f"plan skipped unreadable file {plan_path} ({exc})")
         return None
 
-    text = text.rstrip()
+    text = raw.decode("utf-8", errors="replace").rstrip()
     if not text:
         return None
     return _cap(text)
@@ -86,18 +101,40 @@ def load_plan(repo_path: str | Path, diff: str) -> str | None:
 def _discover_change_id(repo_path: Path, diff: str) -> str | None:
     """Ordered chain: diff-driven → single-active → None.
 
-    The ordering is load-bearing — see module docstring.
+    The ordering is load-bearing — see module docstring. Every candidate is
+    run through ``_validate_change_id`` before return, so a diff-discovered or
+    filesystem-discovered id outside the 10x charset degrades to ``None``
+    (path-traversal / shell-metachar defense-in-depth) rather than reaching a
+    path join.
     """
     touched = _changed_change_ids(diff)
     if len(touched) == 1:
-        return touched.pop()
+        return _validate_change_id(touched.pop())
     if len(touched) > 1:
         return None  # ambiguous diff → fall through / give up (plan-tolerance)
 
     active = _active_change_ids(repo_path)
     if len(active) == 1:
-        return active[0]
+        return _validate_change_id(active[0])
     return None  # 0 or >1 active → no plan (plan-tolerance)
+
+
+def _validate_change_id(change_id: str) -> str | None:
+    """Return ``change_id`` if it matches the 10x charset, else ``None``.
+
+    A second line of defense against path traversal alongside the regex char
+    class — a future loosening of the capture regex must still clear this gate
+    before the id reaches a path join. ``.`` and ``..`` match the charset but
+    are rejected explicitly: ``Path(root/"context"/"changes"/".."/"plan.md")``
+    normalizes up to ``root/context/plan.md``, so accepting them WOULD escape
+    ``context/changes/``. Rejects silently (no WARNING): a hostile/malformed id
+    is not an actionable miss for the user.
+    """
+    if change_id in {".", ".."}:
+        return None
+    if _VALID_CHANGE_ID.fullmatch(change_id):
+        return change_id
+    return None
 
 
 def _changed_change_ids(diff: str) -> set[str]:

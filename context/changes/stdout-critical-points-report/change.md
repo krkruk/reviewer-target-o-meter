@@ -1,7 +1,7 @@
 ---
 change_id: stdout-critical-points-report
 title: Structured JSON critical-points report to stdout (north star)
-status: implemented
+status: impl_reviewed
 created: 2026-08-03
 updated: 2026-08-03
 archived_at: null

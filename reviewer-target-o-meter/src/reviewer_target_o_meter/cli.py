@@ -91,21 +91,6 @@ def _emit_stdout(report) -> None:
     typer.echo(json.dumps(payload, indent=2, default=str))
 
 
-# Minimal fixture diff (the real fixture lives in tests/fixtures/). Kept inline so
-# the CLI is self-contained for the Phase-3 smoke; F-02 replaces this with a real
-# diff computed from the checkout.
-_FIXTURE_DIFF = """\
---- a/src/app.py
-+++ b/src/app.py
-@@ -1,3 +1,5 @@
- def query(user_id):
--    sql = "SELECT * FROM users WHERE id = " + user_id
-+    # NOTE: user_id is attacker-controlled
-+    sql = "SELECT * FROM users WHERE id = " + user_id
-+    return run(sql)
-"""
-
-
 def main() -> None:
     """Console-script entrypoint (referenced by [project.scripts])."""
     app()

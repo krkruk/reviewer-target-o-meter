@@ -204,3 +204,86 @@ def test_unreadable_plan_file_degrades_to_none(
     assert plan is None
     captured = capfd.readouterr()
     assert "WARNING" in captured.err or "WARNING" in captured.out
+
+
+# --- (F1) non-UTF-8 and oversized plans degrade instead of crashing ----------
+
+
+def test_non_utf8_plan_does_not_raise(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    # A plan.md carrying invalid UTF-8 (e.g. a binary blob, a Windows-1252 doc).
+    # UnicodeDecodeError is a ValueError, NOT an OSError — a plain `except
+    # OSError` would let it escape and crash the pipeline. The loader must
+    # decode leniently (errors="replace") and return a plan, never raise.
+    plan_path = tmp_path / "context/changes/feature-x/plan.md"
+    plan_path.parent.mkdir(parents=True, exist_ok=True)
+    plan_path.write_bytes(b"# Plan\nbefore \xff\xfe bad bytes\nafter\n")
+    capfd.readouterr()
+
+    plan = load_plan(tmp_path, _diff("feature-x"))
+
+    # Lenient decode → the plan still loads (no WARNING, no raise); the
+    # replacement chars just appear where the bad bytes were.
+    assert plan is not None
+    assert "# Plan" in plan
+    captured = capfd.readouterr()
+    assert not (captured.err or captured.out)  # no WARNING — this is normal
+
+
+def test_oversize_binary_plan_does_not_oom(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    # A multi-GB-shaped plan.md: well over the cap but written as bytes so we
+    # don't materialize the full string in the test either. read_text() would
+    # load the whole file into RAM before _cap truncated it (MemoryError is
+    # NOT an OSError → would crash). The bounded read must keep peak memory
+    # at O(cap) and still truncate with the visible marker.
+    plan_path = tmp_path / "context/changes/feature-x/plan.md"
+    plan_path.parent.mkdir(parents=True, exist_ok=True)
+    overage = MAX_PLAN_CHARS + 50_000
+    plan_path.write_bytes(b"P" * overage)
+    capfd.readouterr()
+
+    plan = load_plan(tmp_path, _diff("feature-x"))
+
+    assert plan is not None
+    assert len(plan) <= MAX_PLAN_CHARS + 200  # cap + marker overhead only
+    assert "truncated" in plan.lower()
+    captured = capfd.readouterr()
+    assert not (captured.err or captured.out)  # truncation is silent, not a warning
+
+
+# --- (F3) a crafted change-id can't traverse out of context/changes/ ---------
+
+
+def test_path_traversal_change_id_is_rejected(tmp_path: Path) -> None:
+    # A hostile diff names `..` as the change id (or any segment outside the 10x
+    # charset). Today the regex's `[^/]` + pathlib normalization already block
+    # this, but the explicit `_validate_change_id` guard must reject it too — a
+    # future loosening of the capture regex must not silently open traversal.
+    # Plant a real file at the traversal target so the test FAILS if the guard
+    # ever lets the id through (it would read this file instead of degrading).
+    _write(tmp_path / "context/plan.md", "SHOULD NOT BE READ\n")
+    hostile_diff = (
+        "diff --git a/context/changes/../plan.md b/context/changes/../plan.md\n"
+        "+++ b/context/changes/../plan.md\n"
+        "+hostile\n"
+    )
+
+    plan = load_plan(tmp_path, hostile_diff)
+
+    assert plan is None  # rejected by the charset guard, never read the target
+
+
+def test_shell_metachar_change_id_is_rejected(tmp_path: Path) -> None:
+    # A change id carrying shell metacharacters (e.g. "; rm -rf") is outside
+    # the 10x charset and must degrade to None before reaching a path join.
+    hostile_diff = (
+        "diff --git a/context/changes/feature;rm/plan.md "
+        "b/context/changes/feature;rm/plan.md\n"
+        "+++ b/context/changes/feature;rm/plan.md\n"
+        "+hostile\n"
+    )
+
+    assert load_plan(tmp_path, hostile_diff) is None
