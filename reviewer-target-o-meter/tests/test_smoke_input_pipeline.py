@@ -22,6 +22,7 @@ from pathlib import Path
 import git
 import pytest
 
+from reviewer_target_o_meter.agent.nodes import MAX_FINDINGS_PER_DIMENSION
 from reviewer_target_o_meter.config import Config
 from reviewer_target_o_meter.context_loader import load_context
 from reviewer_target_o_meter.diff import compute_diff
@@ -202,3 +203,99 @@ def test_load_context_feeds_real_context_to_live_reviewer(tmp_path: Path) -> Non
     assert any(
         kw in blob for kw in ("sql", "injection", "concat", "interpolat", "user input", "untrusted")
     ), f"planted SQLi not reflected in findings: {blob!r}"
+
+
+def _build_multidefect_repo(tmp_path: Path) -> Path:
+    """A repo whose feature diff plants several distinct defects so the live
+    reviewer has material to flag across more than one dimension.
+
+    Defects: SQL injection (security), a bare ``except:`` that swallows errors
+    (correctness/maintainability), and a mutable default argument (correctness).
+    None require >5 findings in one dimension from a small diff — the cap is
+    exercised host-side regardless of how many the model emits.
+    """
+    repo = git.Repo.init(tmp_path)
+    repo.git.symbolic_ref("HEAD", "refs/heads/master")
+    _configure_identity(repo)
+
+    clean = (
+        "def query(user_id: int) -> str:\n"
+        "    return run(\"SELECT * FROM users WHERE id = %s\", (int(user_id),))\n"
+        "\n"
+        "def handle(req) -> int:\n"
+        "    return int(req.get('n', 0))\n"
+        "\n"
+        "def add_item(item, dest=None):\n"
+        "    if dest is None:\n"
+        "        dest = []\n"
+        "    dest.append(item)\n"
+        "    return dest\n"
+    )
+    (tmp_path / "app.py").write_text(clean)
+    repo.index.add(["app.py"])
+    base = repo.index.commit("base: clean module")
+
+    repo.git.checkout(base.hexsha)
+    buggy = (
+        "def query(user_id) -> str:\n"
+        '    sql = "SELECT * FROM users WHERE id = " + user_id\n'
+        "    return run(sql)\n"
+        "\n"
+        "def handle(req) -> int:\n"
+        "    try:\n"
+        "        return int(req.get('n', 0))\n"
+        "    except:\n"
+        "        pass\n"
+        "\n"
+        "def add_item(item, dest=[]):\n"
+        "    dest.append(item)\n"
+        "    return dest\n"
+    )
+    (tmp_path / "app.py").write_text(buggy)
+    repo.index.add(["app.py"])
+    repo.index.commit("feature: multi-defect change")
+    return tmp_path
+
+
+def test_live_review_respects_per_dimension_cap(tmp_path: Path) -> None:
+    """Phase 3 manual check, automated: a live review of a multi-defect diff
+    never emits more than ``MAX_FINDINGS_PER_DIMENSION`` findings in any single
+    dimension, and the host-side cap holds on whatever the real model returned.
+
+    This is the system-level proof of the per-dimension cap: the free model's
+    output flows through ``report()``'s host-side enforcement, so even if the
+    model over-emits in one dimension (it generally won't on a small diff), the
+    invariant is guaranteed. We assert it on real model output, not just the
+    synthetic input covered by the unit test.
+    """
+    repo_path = _build_multidefect_repo(tmp_path)
+    diff = compute_diff(repo_path, base_ref="master")
+    assert diff and "SELECT * FROM users" in diff
+
+    config = Config.from_env()
+    inputs = {
+        "repo_path": str(repo_path),
+        "diff": diff,
+        "context": None,
+        "plan": None,
+        "findings": [],
+    }
+    report = asyncio.run(arun_review(config, inputs))
+
+    assert isinstance(report, FindingsReport)
+    # If the model emitted nothing, the cap is vacuously satisfied but we have
+    # no system-level signal — require at least one finding on the planted diff.
+    assert report.findings, (
+        f"live reviewer returned no findings for a multi-defect diff; "
+        f"summary={report.summary!r}"
+    )
+
+    # The host-side cap invariant: no dimension exceeds MAX_FINDINGS_PER_DIMENSION.
+    per_dim: dict[str, int] = {}
+    for f in report.findings:
+        per_dim[f.dimension.value] = per_dim.get(f.dimension.value, 0) + 1
+    over = {d: n for d, n in per_dim.items() if n > MAX_FINDINGS_PER_DIMENSION}
+    assert not over, (
+        f"per-dimension cap violated on live output: {over} "
+        f"(cap={MAX_FINDINGS_PER_DIMENSION}); findings={report.findings!r}"
+    )

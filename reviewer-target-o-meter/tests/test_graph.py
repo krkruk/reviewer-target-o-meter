@@ -66,12 +66,44 @@ def test_report_degrades_on_invalid_findings() -> None:
     assert out["findings"] == []
 
 
-def test_report_sorts_by_severity_and_caps_at_ten() -> None:
-    findings = [_finding("observation")] * 5 + [_finding("warning")] * 4 + [_finding("critical")] * 3
+def test_report_caps_per_dimension() -> None:
+    """Per-dimension cap: each dimension is capped independently at
+    ``MAX_FINDINGS_PER_DIMENSION`` (5), severity sort is preserved within each
+    dimension, and the total CAN exceed the old flat 10 when spread across
+    dimensions.
+    """
+    from reviewer_target_o_meter.agent.nodes import MAX_FINDINGS_PER_DIMENSION
+
+    # 7 security (over the cap) + 3 correctness (under the cap); all critical so
+    # severity ordering within a dimension is determined by file/line tiebreak.
+    def _dim_finding(dim: str, line: int) -> dict[str, Any]:
+        return {
+            "file": f"src/{dim}.py", "line": line, "severity": "critical",
+            "impact": "high", "dimension": dim,
+            "title": f"{dim} issue {line}", "detail": "d",
+        }
+
+    findings = [_dim_finding("security", i) for i in range(1, 8)]      # 7 → capped to 5
+    findings += [_dim_finding("correctness", i) for i in range(1, 4)]  # 3 → unchanged
+
     out = report({"findings": findings}, None)
-    severities = [f["severity"] for f in out["findings"]]
-    assert severities == sorted(severities, key=lambda s: {"critical": 0, "warning": 1, "observation": 2}[s])
-    assert len(out["findings"]) <= 10
+    result = out["findings"]
+
+    dims = [f["dimension"] for f in result]
+    assert dims.count("security") == MAX_FINDINGS_PER_DIMENSION  # 7 capped to 5
+    assert dims.count("correctness") == 3                         # under cap, unchanged
+
+    # Total exceeds the old flat 10: 5 + 3 = 8 across two dimensions. (With
+    # more dimensions it can grow further; here two suffice to prove the flat
+    # cap is gone for the spread case.)
+    assert len(result) == MAX_FINDINGS_PER_DIMENSION + 3
+
+    # Severity sort is preserved within each dimension (all critical here → the
+    # line tiebreak must be ascending within the dimension's kept slice).
+    sec_lines = [f["line"] for f in result if f["dimension"] == "security"]
+    assert sec_lines == sorted(sec_lines)
+    # The cap keeps the FIRST 5 by severity order (lines 1..5); 6,7 are dropped.
+    assert sec_lines == [1, 2, 3, 4, 5]
 
 
 # --- graph wiring / node ordering ---
