@@ -811,12 +811,12 @@ manual testing was successful before proceeding to the next phase.
 
 #### Automated
 
-- [x] 3.1 `make test` green incl. rewritten `test_report_caps_per_dimension`
-- [x] 3.2 `make check` clean on `agent/nodes.py`
+- [x] 3.1 `make test` green incl. rewritten `test_report_caps_per_dimension` — 7a8a31f
+- [x] 3.2 `make check` clean on `agent/nodes.py` — 7a8a31f
 
 #### Manual
 
-- [x] 3.3 Smoke run (`make llm-test`): no dimension exceeds 5 findings; severity order preserved within each — verified as the live system smoke `test_live_review_respects_per_dimension_cap` (a multi-defect diff reviewed by the real LLM; the host-side cap holds on real model output, no dimension > 5)
+- [x] 3.3 Smoke run (`make llm-test`): no dimension exceeds 5 findings; severity order preserved within each — verified as the live system smoke `test_live_review_respects_per_dimension_cap` (a multi-defect diff reviewed by the real LLM; the host-side cap holds on real model output, no dimension > 5) — 7a8a31f
 
 ### Phase 4: GitHub posting (httpx)
 
