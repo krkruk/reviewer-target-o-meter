@@ -834,13 +834,13 @@ manual testing was successful before proceeding to the next phase.
 
 #### Automated
 
-- [x] 5.1 `make test` green incl. `test_config.py` post_to_github truth table + `test_cli.py` post/fallback paths
-- [x] 5.2 `make check` clean on `config.py` + `cli.py`
-- [x] 5.3 `.env.example` rewritten with the corrected GHA env-var contract
+- [x] 5.1 `make test` green incl. `test_config.py` post_to_github truth table + `test_cli.py` post/fallback paths — f27bafb
+- [x] 5.2 `make check` clean on `config.py` + `cli.py` — f27bafb
+- [x] 5.3 `.env.example` rewritten with the corrected GHA env-var contract — f27bafb
 
 #### Manual
 
-- [x] 5.4 No-PR-env run → stdout JSON only (no post attempt) — verified as the live system smoke `test_cli_subprocess_emits_valid_stdout_report_without_pr_env` (the real CLI runs as a subprocess over a buggy checkout with no PR env; valid FindingsReport JSON on stdout, advisory exit, planted SQLi reflected)
+- [x] 5.4 No-PR-env run → stdout JSON only (no post attempt) — verified as the live system smoke `test_cli_subprocess_emits_valid_stdout_report_without_pr_env` (the real CLI runs as a subprocess over a buggy checkout with no PR env; valid FindingsReport JSON on stdout, advisory exit, planted SQLi reflected) — f27bafb
 - [ ] 5.5 PR-env run against `./target-o-meter` → Markdown comment appears on the PR
 
 ### Phase 6: GHA workflow template + consumer integration
