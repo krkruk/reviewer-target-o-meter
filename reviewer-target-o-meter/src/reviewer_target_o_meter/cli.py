@@ -14,6 +14,7 @@ from pathlib import Path
 import typer
 
 from .config import Config
+from .diff import compute_diff
 from .graph import run_review
 
 app = typer.Typer(add_completion=False, help="Reviewer-target-o-meter: analyze a checkout and emit a FindingsReport.")
@@ -30,11 +31,12 @@ def review(
     """
     config = Config.from_env()  # raises with a clear message if OPENROUTER_API_KEY is missing
 
-    # F-01 fixture inputs: a tiny diff is used to exercise the smoke. The real
-    # diff/context/plan discovery lands in F-02.
+    # F-02: compute the real diff from the checkout. base_ref is None here
+    # (heuristic-only) until Phase 5 wires config.base_ref through; the fixture
+    # diff is retained for system tests (reached via monkeypatching compute_diff).
     inputs: dict[str, object] = {
         "repo_path": str(repo_path),
-        "diff": _FIXTURE_DIFF,
+        "diff": compute_diff(repo_path, base_ref=None),
         "context": None,
         "plan": None,
         "findings": [],

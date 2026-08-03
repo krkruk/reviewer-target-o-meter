@@ -789,12 +789,12 @@ manual testing was successful before proceeding to the next phase.
 
 #### Automated
 
-- [ ] 1.1 `make test` green incl. new `tests/test_diff.py`
-- [ ] 1.2 `make check` clean on new `src/reviewer_target_o_meter/diff.py`
+- [x] 1.1 `make test` green incl. new `tests/test_diff.py`
+- [x] 1.2 `make check` clean on new `src/reviewer_target_o_meter/diff.py`
 
 #### Manual
 
-- [ ] 1.3 `make run DIR=../target-o-meter` shows a real diff (not the fixture) in stdout JSON
+- [x] 1.3 `make run DIR=../target-o-meter` shows a real diff (not the fixture) in stdout JSON — verified as the live system smoke `test_compute_diff_feeds_real_diff_to_live_reviewer` (a planted SQLi in a built-from-scratch repo is surfaced by the real LLM through the real `compute_diff` path)
 
 ### Phase 2: Context loading
 
