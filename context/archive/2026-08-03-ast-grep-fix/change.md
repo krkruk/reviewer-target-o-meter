@@ -1,10 +1,10 @@
 ---
 change_id: ast-grep-fix
 title: Deprecate the `sg` call in favor of `ast-grep`
-status: implemented
+status: archived
 created: 2026-08-03
 updated: 2026-08-03
-archived_at: null
+archived_at: 2026-08-03T20:56:20Z
 ---
 
 ## Notes
