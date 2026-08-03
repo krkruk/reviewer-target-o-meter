@@ -553,24 +553,24 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [x] 1.1 `make check` (ruff + mypy) passes
-- [x] 1.2 `make test` (unit tests, `-m "not smoke"`) passes
+- [x] 1.1 `make check` (ruff + mypy) passes — d5cb396
+- [x] 1.2 `make test` (unit tests, `-m "not smoke"`) passes — d5cb396
 
 #### Manual
 
-- [x] 1.3 `grep -rn '\bsg\b' src/` returns no hits
-- [x] 1.4 `ast-grep run --json=compact -p '$X + $Y' <file>` returns match JSON locally
+- [x] 1.3 `grep -rn '\bsg\b' src/` returns no hits — d5cb396
+- [x] 1.4 `ast-grep run --json=compact -p '$X + $Y' <file>` returns match JSON locally — d5cb396
 
 ### Phase 2: Tests — update `test_tools.py` `sg` references
 
 #### Automated
 
-- [ ] 2.1 `make test` passes with the renamed/updated structural-search tests
-- [ ] 2.2 New/extended cmd-name assertion (`calls[0][0][0] == "ast-grep"`) present and passing
+- [x] 2.1 `make test` passes with the renamed/updated structural-search tests
+- [x] 2.2 New/extended cmd-name assertion (`calls[0][0][0] == "ast-grep"`) present and passing
 
 #### Manual
 
-- [ ] 2.3 `grep -rn '"sg"' tests/` returns no hits
+- [x] 2.3 `grep -rn '"sg"' tests/` returns no hits
 
 ### Phase 3: Integration + docs — GHA install path + AGENTS.md/README
 
