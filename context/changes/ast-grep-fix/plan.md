@@ -599,14 +599,14 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [x] 5.1 `feature/update-ast-grep-configuration` pushed to `origin` (Phases 1-4 landed on the branch)
-- [x] 5.2 Consumer `review.yml` temporarily pointed at `@feature/update-ast-grep-configuration` + `ast-grep` install target, on a throwaway branch
-- [x] 5.3 Mock-change PR opened on `../target-o-meter` (throwaway smoke trigger)
-- [x] 5.4 `gh run list --workflow=review.yml` shows the run `success`; `gh pr view <n> --comments` shows the `github-actions[bot]` comment
+- [x] 5.1 `feature/update-ast-grep-configuration` pushed to `origin` (Phases 1-4 landed on the branch) — 7581e58
+- [x] 5.2 Consumer `review.yml` temporarily pointed at `@feature/update-ast-grep-configuration` + `ast-grep` install target, on a throwaway branch — 7581e58
+- [x] 5.3 Mock-change PR opened on `../target-o-meter` (throwaway smoke trigger) — 7581e58
+- [x] 5.4 `gh run list --workflow=review.yml` shows the run `success`; `gh pr view <n> --comments` shows the `github-actions[bot]` comment — 7581e58
 
 #### Manual
 
-- [x] 5.5 "Install ast-grep" step log installs to `/usr/local/bin/ast-grep` (not `sg`)
-- [x] 5.6 Run step log contains no `sg is deprecated` warning (the rename silenced it end-to-end)
-- [x] 5.7 Posted comment shows `structural_search` produced real anchored findings (not the degrade string)
-- [x] 5.8 Smoke PR closed without merging; consumer workflow reverted to master install URL / throwaway branch deleted
+- [x] 5.5 "Install ast-grep" step log installs to `/usr/local/bin/ast-grep` (not `sg`) — 7581e58
+- [x] 5.6 Run step log contains no `sg is deprecated` warning (the rename silenced it end-to-end) — 7581e58
+- [x] 5.7 Posted comment shows `structural_search` produced real anchored findings (not the degrade string) — 7581e58
+- [x] 5.8 Smoke PR closed without merging; consumer workflow reverted to master install URL / throwaway branch deleted — 7581e58
