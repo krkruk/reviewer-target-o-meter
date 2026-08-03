@@ -747,10 +747,10 @@ ready for `/10x-impl-review` and the north-star hypothesis is considered proven
 
 #### Automated
 
-- [x] 1.1 `make check` clean on `agent/nodes.py` (rewritten `_SYSTEM_PROMPT`)
+- [x] 1.1 `make check` clean on `agent/nodes.py` (rewritten `_SYSTEM_PROMPT`) — 09186ed
 - [x] 1.2 `make test` green incl. new prompt-invariant test (diff-scoping
       protocol — anchor rule AND active-investigation rule; plan-tolerance
-      conditional, no-execution rule, cap reference, lens names)
+      conditional, no-execution rule, cap reference, lens names) — 09186ed
 
 #### Manual
 
