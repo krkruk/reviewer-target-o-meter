@@ -822,13 +822,13 @@ manual testing was successful before proceeding to the next phase.
 
 #### Automated
 
-- [x] 4.1 `make test` green incl. new `tests/test_github.py` (MockTransport)
-- [x] 4.2 `make check` clean on new `src/reviewer_target_o_meter/github.py`
-- [x] 4.3 `uv.lock` records `httpx` as a direct dependency
+- [x] 4.1 `make test` green incl. new `tests/test_github.py` (MockTransport) — 552a0e4
+- [x] 4.2 `make check` clean on new `src/reviewer_target_o_meter/github.py` — 552a0e4
+- [x] 4.3 `uv.lock` records `httpx` as a direct dependency — 552a0e4
 
 #### Manual
 
-- [x] 4.4 `render_comment` output eyeballed in a Markdown previewer against a flagged report — verified as the live system smoke `test_render_comment_renders_live_findings_as_valid_markdown` (the renderer produces well-formed header/table/details/disclaimer Markdown over the live reviewer's findings, with the planted SQLi reflected)
+- [x] 4.4 `render_comment` output eyeballed in a Markdown previewer against a flagged report — verified as the live system smoke `test_render_comment_renders_live_findings_as_valid_markdown` (the renderer produces well-formed header/table/details/disclaimer Markdown over the live reviewer's findings, with the planted SQLi reflected) — 552a0e4
 
 ### Phase 5: Config + CLI wiring (env-driven mode switch)
 
