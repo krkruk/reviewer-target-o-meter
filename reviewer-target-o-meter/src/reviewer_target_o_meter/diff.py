@@ -68,14 +68,27 @@ def _resolve_base(repo: Repo, override: str | None) -> str | None:
 
     Returns ``None`` if nothing resolves (the caller degrades). The ordering is
     load-bearing: an explicit override always wins; the CI var (set on GHA
-    ``pull_request`` events) wins over heuristics; the heuristic chain walks
-    the conventional default-branch names.
+    ``pull_request`` events) wins over heuristics when it resolves; the heuristic
+    chain walks the conventional default-branch names.
+
+    The CI var is VERIFIED before use: ``GITHUB_BASE_REF`` is a branch NAME
+    (e.g. ``master``), but ``actions/checkout`` leaves HEAD detached with only
+    ``origin/<base>`` present, so the bare name often doesn't resolve locally.
+    Returning it verbatim makes ``git diff <base> HEAD`` fail (exit 128); when it
+    doesn't resolve we fall through to the heuristic, which finds ``origin/<base>``.
+    The override is returned as-is when set (an explicit user choice is not
+    silently overridden; git diff's own try/except degrades if it fails).
     """
     if override:  # 1. explicit arg / BASE_REF env (passed in by the CLI)
         return override
     ci_base = os.environ.get("GITHUB_BASE_REF")  # 2. GHA pull_request events
     if ci_base:
-        return ci_base
+        # The bare name may not resolve locally (GHA detached checkout), but the
+        # remote-tracking ref origin/<base> usually does. Try both before falling
+        # through to the heuristic.
+        for cand in (ci_base, f"origin/{ci_base}"):
+            if _resolves(repo, cand):
+                return cand
     for cand in _BASE_CANDIDATES:  # 3. heuristic
         if _resolves(repo, cand):
             return cand

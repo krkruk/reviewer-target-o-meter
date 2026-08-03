@@ -92,6 +92,65 @@ def test_resolve_base_github_base_ref_before_heuristic(
     assert diff_mod._resolve_base(repo, override=None) == "master"
 
 
+def test_resolve_base_github_base_ref_must_resolve_locally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GHA reality check: ``GITHUB_BASE_REF`` is a branch NAME (e.g. ``master``),
+    but ``actions/checkout`` leaves HEAD detached with only ``origin/master``
+    present — no local ``master`` ref. A CI var that doesn't resolve locally must
+    NOT be returned verbatim, or ``git diff <base> HEAD`` fails with exit 128
+    (observed on the consumer PR #22 run). The resolver must verify resolvability
+    and fall through to the heuristic (``origin/master``).
+    """
+    repo = _make_repo(tmp_path, base_branch="master")
+    # Simulate the GHA checkout: add origin/master as a remote-tracking ref but
+    # delete the local master so only origin/master resolves.
+    repo.create_remote("origin", str(tmp_path))
+    repo.git.fetch("origin", "master")
+    repo.git.branch("-D", "master")
+
+    # GITHUB_BASE_REF carries the bare name that does NOT resolve locally.
+    monkeypatch.setenv("GITHUB_BASE_REF", "master")
+
+    resolved = diff_mod._resolve_base(repo, override=None)
+    # Recovers origin/master (the remote-tracking ref derived from the CI var) —
+    # never the unresolvable bare name, never None when origin/master exists.
+    assert resolved == "origin/master"
+
+
+def test_resolve_base_ci_var_origin_form_for_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same recovery when the consumer's default branch is ``main``: the CI var
+    ``main`` doesn't resolve locally, but ``origin/main`` does."""
+    repo = _make_repo(tmp_path, base_branch="main")
+    repo.create_remote("origin", str(tmp_path))
+    repo.git.fetch("origin", "main")
+    repo.git.branch("-D", "main")
+    monkeypatch.setenv("GITHUB_BASE_REF", "main")
+
+    assert diff_mod._resolve_base(repo, override=None) == "origin/main"
+
+
+def test_compute_diff_degrades_when_base_unresolvable_in_ci(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """The compute_diff caller path: when GITHUB_BASE_REF names a ref that isn't
+    local and the heuristic can't recover, compute_diff must return "" + a
+    WARNING (never raise, never emit a misleading empty-diff review).
+    """
+    repo = _make_repo(tmp_path, base_branch="master")
+    _add_change(repo, tmp_path)
+    # No local master, no origin/* — nothing resolves.
+    repo.git.branch("-D", "master")
+    monkeypatch.setenv("GITHUB_BASE_REF", "master")
+
+    result = compute_diff(tmp_path, base_ref=None)
+    assert result == ""
+    captured = capfd.readouterr()
+    assert "WARNING" in captured.err or "WARNING" in captured.out
+
+
 def test_resolve_base_falls_back_to_heuristic(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path, base_branch="master")
     _add_change(repo, tmp_path)
