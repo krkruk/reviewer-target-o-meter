@@ -800,12 +800,12 @@ manual testing was successful before proceeding to the next phase.
 
 #### Automated
 
-- [x] 2.1 `make test` green incl. new `tests/test_context_loader.py`
-- [x] 2.2 `make check` clean on new `src/reviewer_target_o_meter/context_loader.py`
+- [x] 2.1 `make test` green incl. new `tests/test_context_loader.py` — 6e25eeb
+- [x] 2.2 `make check` clean on new `src/reviewer_target_o_meter/context_loader.py` — 6e25eeb
 
 #### Manual
 
-- [x] 2.3 `make run DIR=../target-o-meter` shows the consumer's AGENTS.md + foundation docs in the effective context — verified as the live system smoke `test_load_context_feeds_real_context_to_live_reviewer` (real `load_context` output carries AGENTS.md + foundation, and the live agent still surfaces the planted defect over diff+context)
+- [x] 2.3 `make run DIR=../target-o-meter` shows the consumer's AGENTS.md + foundation docs in the effective context — verified as the live system smoke `test_load_context_feeds_real_context_to_live_reviewer` (real `load_context` output carries AGENTS.md + foundation, and the live agent still surfaces the planted defect over diff+context) — 6e25eeb
 
 ### Phase 3: Per-dimension findings cap
 
