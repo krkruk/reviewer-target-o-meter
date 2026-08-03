@@ -841,7 +841,7 @@ manual testing was successful before proceeding to the next phase.
 #### Manual
 
 - [x] 5.4 No-PR-env run → stdout JSON only (no post attempt) — verified as the live system smoke `test_cli_subprocess_emits_valid_stdout_report_without_pr_env` (the real CLI runs as a subprocess over a buggy checkout with no PR env; valid FindingsReport JSON on stdout, advisory exit, planted SQLi reflected) — f27bafb
-- [x] 5.5 PR-env run → Markdown comment appears on the PR — verified as the live system smoke `test_cli_subprocess_posts_real_comment_to_pr` (the real CLI subprocess, given PR env, posted a real Markdown comment — header + findings table with source links + collapsible details + advisory disclaimer — to PR #2 on krkruk/reviewer-target-o-meter via the live GitHub API; read back and asserted). Target repo/PR are configurable via POST_GITHUB_REPOSITORY / POST_PR_NUMBER; gated so it only fires when both + GITHUB_TOKEN + SMOKE=1 are set.
+- [x] 5.5 PR-env run → Markdown comment appears on the PR — verified as the live system smoke `test_cli_subprocess_posts_real_comment_to_pr` (the real CLI subprocess, given PR env, posted a real Markdown comment — header + findings table with source links + collapsible details + advisory disclaimer — to PR #2 on krkruk/reviewer-target-o-meter via the live GitHub API; read back and asserted). Target repo/PR are configurable via POST_GITHUB_REPOSITORY / POST_PR_NUMBER; gated so it only fires when both + GITHUB_TOKEN + SMOKE=1 are set. — 12ac497
 
 ### Phase 6: GHA workflow template + consumer integration
 
