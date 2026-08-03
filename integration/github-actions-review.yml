@@ -48,11 +48,11 @@ jobs:
 
       - name: Install ast-grep (structural_search tool)
         run: |
-          # If sg is unavailable at runtime, structural_search degrades to an
+          # If ast-grep is unavailable at runtime, structural_search degrades to an
           # error string pointing the model at text_search — the pipeline still
           # runs (degrade philosophy). Asset name carries an `app-` prefix.
-          curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o sg.zip
-          unzip sg.zip && install -m 0755 ast-grep /usr/local/bin/sg
+          curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o ast-grep.zip
+          unzip ast-grep.zip && install -m 0755 ast-grep /usr/local/bin/ast-grep
 
       - name: Run reviewer-target-o-meter
         # The tool's exit code is ADVISORY (FR-008): 1 = findings flagged, 0 =

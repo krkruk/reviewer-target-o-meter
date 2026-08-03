@@ -565,23 +565,23 @@ latency are identical (verified: `ast-grep` and `sg` are the same binary —
 
 #### Automated
 
-- [x] 2.1 `make test` passes with the renamed/updated structural-search tests
-- [x] 2.2 New/extended cmd-name assertion (`calls[0][0][0] == "ast-grep"`) present and passing
+- [x] 2.1 `make test` passes with the renamed/updated structural-search tests — 0b6ca67
+- [x] 2.2 New/extended cmd-name assertion (`calls[0][0][0] == "ast-grep"`) present and passing — 0b6ca67
 
 #### Manual
 
-- [x] 2.3 `grep -rn '"sg"' tests/` returns no hits
+- [x] 2.3 `grep -rn '"sg"' tests/` returns no hits — 0b6ca67
 
 ### Phase 3: Integration + docs — GHA install path + AGENTS.md/README
 
 #### Automated
 
-- [ ] 3.1 `grep` sweep over `integration/github-actions-review.yml AGENTS.md README.md` returns no runtime-binary `sg` hits
-- [ ] 3.2 Workflow YAML still parses
+- [x] 3.1 `grep` sweep over `integration/github-actions-review.yml AGENTS.md README.md` returns no runtime-binary `sg` hits
+- [x] 3.2 Workflow YAML still parses
 
 #### Manual
 
-- [ ] 3.3 Read updated §f recipe top-to-bottom — `app-` prefix NOTE intact, install target is `ast-grep`
+- [x] 3.3 Read updated §f recipe top-to-bottom — `app-` prefix NOTE intact, install target is `ast-grep`
 
 ### Phase 4: Verification — full test run incl. live LLM smoke
 
