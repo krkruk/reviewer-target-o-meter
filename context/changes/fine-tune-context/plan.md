@@ -582,20 +582,20 @@ untouched.
 
 #### Manual
 
-- [x] 2.2 PR #28 diagnosis command run ≥2× with DEBUG output captured
-- [x] 2.3 `diagnosis.md` written — answers all five dimension-map questions with observed numbers, names the bottleneck, prescribes the Phase-3 fix
+- [x] 2.2 PR #28 diagnosis command run ≥2× with DEBUG output captured — 424a307
+- [x] 2.3 `diagnosis.md` written — answers all five dimension-map questions with observed numbers, names the bottleneck, prescribes the Phase-3 fix — 424a307
 
 ### Phase 3: Apply the targeted fix + confirm findings
 
 #### Automated
 
-- [x] 3.1 `make check` green after the diagnosis-prescribed fix
-- [x] 3.2 `make test` green (update any tests the fix touches)
+- [x] 3.1 `make check` green after the diagnosis-prescribed fix — 424a307
+- [x] 3.2 `make test` green (update any tests the fix touches) — 424a307
 
 #### Manual
 
-- [x] 3.3 PR #28 (or substitute large PR) produces >0 real findings with valid anchors/severities (AGENTS.md §e checklist)
-- [x] 3.4 Run completes within wall-clock budget; default-INFO production path works without instrumentation noise
+- [x] 3.3 PR #28 (or substitute large PR) produces >0 real findings with valid anchors/severities (AGENTS.md §e checklist) — 424a307
+- [x] 3.4 Run completes within wall-clock budget; default-INFO production path works without instrumentation noise — 424a307
 
 ### Phase 4: Remove instrumentation + finalize
 
