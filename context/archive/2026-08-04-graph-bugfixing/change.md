@@ -1,10 +1,10 @@
 ---
 change_id: graph-bugfixing
 title: Fix uncaught model-call TypeError crashing the checks node (misdiagnosed as recursion)
-status: implemented
+status: archived
 created: 2026-08-04
 updated: 2026-08-04
-archived_at: null
+archived_at: 2026-08-04T16:33:27Z
 ---
 
 ## Notes
