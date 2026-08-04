@@ -77,6 +77,27 @@ PR_NUMBER=<n> GITHUB_TOKEN=<tok> GITHUB_REPOSITORY=<owner>/<repo> \
   make run DIR=../<consumer>
 ```
 
+### Integration/system scripts (automated manual checks)
+
+Two scripts under `integration/scripts/` automate the manual verification steps
+(as integration/system tests) instead of checking them by hand:
+
+```bash
+# stdout mode: asserts the INFO trace + Markdown preview land on stderr and
+# stdout stays the pure JSON report. Covers manual steps 1.5 + 2.5.
+OPENROUTER_API_KEY=sk-... ./integration/scripts/verify-stdout-mode.sh ../<consumer>
+
+# posting mode (DRY-RUN by default): asserts the trace + preview + post
+# breadcrumb appear around a (failing, throwaway-token) post, which degrades to
+# stdout + WARNING. Add POST_REAL=1 + a real GITHUB_TOKEN + PR to actually post.
+OPENROUTER_API_KEY=sk-... \
+  ./integration/scripts/verify-posting-mode.sh ../<consumer> <owner>/<repo> [PR]
+```
+
+Each script exits `0` when all observability assertions hold and `1` otherwise
+(the tool's own advisory exit code is reported but is not the script's verdict).
+
+
 A bad token degrades to stdout JSON + a `WARNING:` on stderr; the exit stays
 advisory (no crash, no broken comment).
 

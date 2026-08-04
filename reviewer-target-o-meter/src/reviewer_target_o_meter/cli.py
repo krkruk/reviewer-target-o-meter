@@ -58,13 +58,13 @@ def review(
     # don't diff twice. load_plan is None-tolerant (no plan discoverable → the
     # prompt's plan-tolerance kicks in; FR-006).
     diff = compute_diff(repo_path, base_ref=config.base_ref)
-    # The truncation flag is the in-module diff breadcrumb's job (it sees the
-    # raw vs capped length); here we only echo the resolved base + final size.
+    # The resolved base + final size are CLI-level metadata the in-module diff
+    # breadcrumb (raw vs capped length, truncation flag) doesn't carry.
     log.info("diff computed — base=%s chars=%d", config.base_ref, len(diff))
     context = load_context(repo_path)
-    log.info("context loaded — present=%s", context is not None)
     plan = load_plan(repo_path, diff)
-    log.info("plan discovered — present=%s chars=%d", plan is not None, len(plan or ""))
+    # The richer context/plan breadcrumbs (chunk count, change-id-or-reason) are
+    # emitted in-module; no need to echo a thinner CLI-level duplicate here.
     inputs: dict[str, object] = {
         "repo_path": str(repo_path),
         "diff": diff,
