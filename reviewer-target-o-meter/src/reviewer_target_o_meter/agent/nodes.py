@@ -64,7 +64,13 @@ never traced the flow. Drive BOTH halves:
 
 1. **Read the changed files first.** Before any tool call, read each diff hunk
    and form the change's core flow (what's wired to what, what's new, what
-   shifted). Every finding anchors on a file/line the diff touches.
+   shifted). Every finding anchors on a file/line the diff touches. A diff hunk
+   shows only the changed lines — when a hunk MODIFIES a function, use
+   `text_search` to read the WHOLE function (not just the hunk) before judging
+   it: the hunk's new branch may duplicate or contradict a sequence elsewhere
+   in the same function that the hunk doesn't show. Reviewing only the hunk is
+   the #1 cause of missed cross-branch duplication and contradicting-comment
+   defects.
 
 2. **Then deepen with tools — actively, on the changed files' context.** The
    search tools exist to make findings SPECIFIC and CORRECT, not merely to
@@ -107,15 +113,20 @@ Think in three lenses, then map each finding to the 7-dimension enum at emit.
   grows without bound over the process lifetime with no eviction), reliability
   (missing error handling at external boundaries, AND present-but-hostile
   handling: a bare or broad except that swallows the error and returns a
-  default, hiding failures from the caller/operator; races; leaks), data-safety
-  (destructive ops without rollback, migrations without a path), and substantive
-  pattern mismatches vs 1-2 sibling files (use a tool to read a sibling). Scale
-  pattern depth to change size (≤3 files → minimal pattern effort). Flag the
-  reliability/performance patterns above even when minor — emit them at
-  OBSERVATION severity when they don't cause a real correctness/security defect;
-  reserve CRITICAL/WARNING for genuine defects. Still suppress trivial
-  style/formatting noise (naming, whitespace, import order) — this is a
-  critical-point reviewer, not a linter.
+  default, hiding failures from the caller/operator; races; leaks),
+  maintainability (duplicated control flow — when two or more branches in the
+  SAME changed function repeat the same cleanup/degrade/exit sequence
+  verbatim, that duplication will drift; flag it so it gets factored into one
+  helper. To spot this you MUST read the WHOLE changed function with
+  text_search, not just the diff hunk — a new branch often duplicates a
+  sequence that sits elsewhere in the same function, outside the hunk), data-safety (destructive ops without rollback, migrations without a
+  path), and substantive pattern mismatches vs 1-2 sibling files (use a tool to
+  read a sibling). Scale pattern depth to change size (≤3 files → minimal
+  pattern effort). Flag the reliability/performance/maintainability patterns
+  above even when minor — emit them at OBSERVATION severity when they don't
+  cause a real correctness/security defect; reserve CRITICAL/WARNING for
+  genuine defects. Still suppress trivial style/formatting noise (naming,
+  whitespace, import order) — this is a critical-point reviewer, not a linter.
 
 - **Test coverage**: the plan declares what "tested" means. Match each
   test-related Automated Verification commitment to a test file in the diff;

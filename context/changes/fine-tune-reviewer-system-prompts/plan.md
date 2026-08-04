@@ -280,28 +280,28 @@ intact. Each prompt edit keeps the prompt-invariant tests green.
 
 #### Manual
 
-- [ ] 1.4 Re-run vs the `rate_limiter` mock change; rolled into Phase 3 (the 0/6 variance proved a single run isn't signal)
+- [x] 1.4 Re-run vs the `rate_limiter` mock change; rolled into Phase 3 (the 0/6 variance proved a single run isn't signal)
 
 ### Phase 2: `optional_findings` schema + render + prompt wiring
 
 #### Automated
 
-- [x] 2.1 Add `optional_findings: list[Finding]` (cap 3) to `FindingsReport`; confirm `exit_code`/`flagged` iterate main `findings` only (isolation)
-- [x] 2.2 Thread `optional_findings` through the `report` node into the emitted report object
-- [x] 2.3 Render in both surfaces: Markdown "Optional style observations" section + stdout JSON key, with `O{n}` ids (separate counter from `F{n}`)
-- [x] 2.4 Add prompt section directing 1-3 style/pickiness observations into `optional_findings` every review + prompt-invariant test
-- [x] 2.5 `make test` passes; `make check` passes
+- [x] 2.1 Add `optional_findings: list[Finding]` (cap 3) to `FindingsReport`; confirm `exit_code`/`flagged` iterate main `findings` only (isolation) — d1eb68a
+- [x] 2.2 Thread `optional_findings` through the `report` node into the emitted report object — d1eb68a
+- [x] 2.3 Render in both surfaces: Markdown "Optional style observations" section + stdout JSON key, with `O{n}` ids (separate counter from `F{n}`) — d1eb68a
+- [x] 2.4 Add prompt section directing 1-3 style/pickiness observations into `optional_findings` every review + prompt-invariant test — d1eb68a
+- [x] 2.5 `make test` passes; `make check` passes — d1eb68a
 
 #### Manual
 
-- [ ] 2.6 Live run shows optional findings populated (1-3) in Markdown + JSON; exit code unchanged
+- [x] 2.6 Live run shows optional findings populated (1-3) in Markdown + JSON; exit code unchanged — VERIFIED: raw_optional=2, O1/O2 render in a distinct "Optional style observations (non-blocking)" section; exit driven only by main findings
 
 ### Phase 3: recall tuning + stable validation (all 6 defects)
 
 #### Automated
 
-- [ ] 3.1 Iterate prompt recall (safety/coverage lens) until all 6 mock defects caught; keep invariants green
+- [x] 3.1 Iterate prompt recall: added duplicated-control-flow to the maintainability list + a "read the WHOLE changed function, not just the hunk" hard rule (cross-branch duplication sits outside the hunk); keep invariants green. Result: recall stably 5/6 + optional findings; defect #6 (cli cross-branch duplication) resistant across 3 prompt iterations — see 3.2
 
 #### Manual
 
-- [ ] 3.2 Two consecutive runs vs `/tmp/mock-defect-review` catch all 6 defects + render optional findings; no severity inflation / FP explosion
+- [ ] 3.2 PARTIAL: across multiple 2-run A/Bs, 5/6 defects are caught stably (token, off-by-one, untested, unbounded dict, bare-except via optional). Defect #6 (duplicated `_warn`+`_emit_stdout`+`sys.exit` across two cli.py branches) was NOT caught consistently — it requires reading the full function to spot cross-branch duplication outside the diff hunk, a genuinely advanced behavior. Open as a follow-up rather than over-fit the prompt to one synthetic case.
