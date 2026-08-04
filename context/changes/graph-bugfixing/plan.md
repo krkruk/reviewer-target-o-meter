@@ -362,15 +362,15 @@ for the model-switch decision.
 
 #### Automated
 
-- [x] 2.1 Raise `_MAX_TOKENS` (final: 60000) in `provider.py` with updated reasoning-token comment — tuned live (8192 → 16384 → 48000 → 60000) until the model stopped exhausting the budget
-- [x] 2.2 Add best-effort token/usage breadcrumb on the success path; escalate to WARNING (with switch-model hint) when output tokens near the ceiling or `finish_reason == "length"`
-- [x] 2.3 Unit-assert the usage-extraction helper is best-effort (no raise on missing metadata)
-- [x] 2.4 `make test` passes; `make check` passes
-- [x] 2.6 Catch `NodeTimeoutError` in `arun_review` (degrades to empty report + advisory exit) — surfaced live in 2.5: raising `_MAX_TOKENS` let the reasoning model reason past the 120s `run_timeout`, and the TimeoutPolicy raises outside the in-node Phase-1 boundary so `arun_review` (GraphRecursionError-only) crashed; TDD'd RED→GREEN + manual verify
+- [x] 2.1 Raise `_MAX_TOKENS` (final: 60000) in `provider.py` with updated reasoning-token comment — tuned live (8192 → 16384 → 48000 → 60000) until the model stopped exhausting the budget — 618d993
+- [x] 2.2 Add best-effort token/usage breadcrumb on the success path; escalate to WARNING (with switch-model hint) when output tokens near the ceiling or `finish_reason == "length"` — 618d993
+- [x] 2.3 Unit-assert the usage-extraction helper is best-effort (no raise on missing metadata) — 618d993
+- [x] 2.4 `make test` passes; `make check` passes — 618d993
+- [x] 2.6 Catch `NodeTimeoutError` in `arun_review` (degrades to empty report + advisory exit) — surfaced live in 2.5: raising `_MAX_TOKENS` let the reasoning model reason past the 120s `run_timeout`, and the TimeoutPolicy raises outside the in-node Phase-1 boundary so `arun_review` (GraphRecursionError-only) crashed; TDD'd RED→GREEN + manual verify — 618d993
 
 #### Manual
 
-- [x] 2.5 `make run DIR=../../target-o-meter/` shows the usage breadcrumb (success) or the Phase-1 WARNING (degrade); confirm H-B signal visibility — VERIFIED live vs PR #26 multiple times (nemotron degrade on oversized diff → DeepSeek success)
+- [x] 2.5 `make run DIR=../../target-o-meter/` shows the usage breadcrumb (success) or the Phase-1 WARNING (degrade); confirm H-B signal visibility — VERIFIED live vs PR #26 multiple times (nemotron degrade on oversized diff → DeepSeek success) — 618d993
 
 ### Phase 3: model switch + diff cap + duplicate-findings fix (post-validation)
 
@@ -381,11 +381,11 @@ for the model-switch decision.
 
 #### Automated
 
-- [x] 3.1 Switch `DEFAULT_MODEL` to paid `deepseek/deepseek-v4-flash-0731` (config.py + .env.example + test_config.py) — the free nemotron exhausted its budget / timed out on large diffs; DeepSeek honors strict structured output and runs clean
-- [x] 3.2 Raise `MAX_DIFF_CHARS` to 45000 (diff.py) — distinct from the token budget; sizes the `checks` prompt input
-- [x] 3.3 Fix duplicate-findings bug: `ReviewState.findings` uses the `add` reducer, and `report` re-emitted `findings` → every finding doubled; added `report: FindingsReport` (last-wins) to the schema + `report` node emits only `{"report": ...}`. TDD'd RED (1→2) → GREEN (1→1); updated 4 report-node tests to the new return shape
-- [x] 3.4 `make test` passes (133); `make check` passes
+- [x] 3.1 Switch `DEFAULT_MODEL` to paid `deepseek/deepseek-v4-flash-0731` (config.py + .env.example + test_config.py) — the free nemotron exhausted its budget / timed out on large diffs; DeepSeek honors strict structured output and runs clean — 618d993
+- [x] 3.2 Raise `MAX_DIFF_CHARS` to 45000 (diff.py) — distinct from the token budget; sizes the `checks` prompt input — 618d993
+- [x] 3.3 Fix duplicate-findings bug: `ReviewState.findings` uses the `add` reducer, and `report` re-emitted `findings` → every finding doubled; added `report: FindingsReport` (last-wins) to the schema + `report` node emits only `{"report": ...}`. TDD'd RED (1→2) → GREEN (1→1); updated 4 report-node tests to the new return shape — 618d993
+- [x] 3.4 `make test` passes (133); `make check` passes — 618d993
 
 #### Manual
 
-- [x] 3.5 `make run` vs PR #26 with DeepSeek + 60k/45k caps: clean run, `finish_reason=stop`, usage `input=24521 output=258`, 0 findings (no duplicates), comment posted, exit 0
+- [x] 3.5 `make run` vs PR #26 with DeepSeek + 60k/45k caps: clean run, `finish_reason=stop`, usage `input=24521 output=258`, 0 findings (no duplicates), comment posted, exit 0 — 618d993
