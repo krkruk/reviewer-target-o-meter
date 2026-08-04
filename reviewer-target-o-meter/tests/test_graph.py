@@ -47,14 +47,15 @@ def test_plan_discovery_is_none_tolerant() -> None:
 
 def test_report_revalidates_and_exits_advisory_on_flagged() -> None:
     out = report({"findings": [_finding("critical")]}, None)
-    assert out["exit_code"] == 1
-    assert isinstance(out["report"], FindingsReport)
-    assert len(out["findings"]) == 1
+    rpt = out["report"]
+    assert isinstance(rpt, FindingsReport)
+    assert rpt.exit_code == 1
+    assert len(rpt.findings) == 1
 
 
 def test_report_exits_zero_on_all_observations() -> None:
     out = report({"findings": [_finding("observation")]}, None)
-    assert out["exit_code"] == 0
+    assert out["report"].exit_code == 0
 
 
 def test_report_degrades_on_invalid_findings() -> None:
@@ -62,8 +63,9 @@ def test_report_degrades_on_invalid_findings() -> None:
     bad = [{"file": "/abs/x.py", "line": 1, "severity": "critical",
             "impact": "high", "dimension": "security", "title": "t", "detail": "d"}]
     out = report({"findings": bad}, None)
-    assert out["exit_code"] == 0
-    assert out["findings"] == []
+    rpt = out["report"]
+    assert rpt.exit_code == 0
+    assert rpt.findings == []
 
 
 def test_report_caps_per_dimension() -> None:
@@ -87,9 +89,9 @@ def test_report_caps_per_dimension() -> None:
     findings += [_dim_finding("correctness", i) for i in range(1, 4)]  # 3 → unchanged
 
     out = report({"findings": findings}, None)
-    result = out["findings"]
+    result = out["report"].findings
 
-    dims = [f["dimension"] for f in result]
+    dims = [f.dimension.value for f in result]
     assert dims.count("security") == MAX_FINDINGS_PER_DIMENSION  # 7 capped to 5
     assert dims.count("correctness") == 3                         # under cap, unchanged
 
@@ -100,7 +102,7 @@ def test_report_caps_per_dimension() -> None:
 
     # Severity sort is preserved within each dimension (all critical here → the
     # line tiebreak must be ascending within the dimension's kept slice).
-    sec_lines = [f["line"] for f in result if f["dimension"] == "security"]
+    sec_lines = [f.line for f in result if f.dimension.value == "security"]
     assert sec_lines == sorted(sec_lines)
     # The cap keeps the FIRST 5 by severity order (lines 1..5); 6,7 are dropped.
     assert sec_lines == [1, 2, 3, 4, 5]
@@ -166,6 +168,41 @@ def test_end_to_end_mocked_llm_emits_report(monkeypatch: pytest.MonkeyPatch) -> 
     # The fake agent was called exactly once (single checks invocation).
     assert len(fake_agent.invoked_with) == 1
     assert report_obj.exit_code == 1  # the injected CRITICAL finding flags
+
+
+def test_findings_are_not_duplicated_across_report_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single finding from the model must not be doubled by the report node.
+
+    Regression guard for the duplicate-findings bug: ``ReviewState.findings`` uses
+    the LangGraph ``add`` reducer (accumulates across nodes), and the ``report``
+    node re-emitted ``findings`` — so the reducer appended the validated finding
+    onto the one ``checks`` already added, doubling every finding (live: 1 model
+    finding → F1 and F2 identical). The report node must emit its result under a
+    key that survives the merge WITHOUT going through the ``add`` reducer.
+    """
+    import asyncio
+
+    import reviewer_target_o_meter.graph as graph_mod
+    from reviewer_target_o_meter.findings import Dimension, Finding, Impact, Severity
+
+    payload = FindingsReport(findings=[Finding(
+        file=".gitignore", line=20, severity=Severity.OBSERVATION, impact=Impact.LOW,
+        dimension=Dimension.MAINTAINABILITY, title="node-modules entry",
+        detail="typo for node_modules")])
+    fake_agent = _FakeAgent(payload)
+    real_build_graph = graph_mod.build_graph
+    monkeypatch.setattr(
+        graph_mod, "build_graph", lambda cfg: real_build_graph(cfg, agent=fake_agent)
+    )
+
+    inputs = {"repo_path": "/repo", "diff": "diff", "context": None, "plan": None, "findings": []}
+    report_obj = asyncio.run(graph_mod.arun_review(_cfg(), inputs))
+    assert isinstance(report_obj, FindingsReport)
+    # ONE finding in → ONE finding out (the bug doubled it to 2).
+    assert len(report_obj.findings) == 1
+    # And the content is the single finding, not two copies.
+    titles = [f.title for f in report_obj.findings]
+    assert titles == ["node-modules entry"]
 
 
 # --- checks-node error boundary (H-A): any model-call failure degrades ---
@@ -282,4 +319,32 @@ def test_graph_recursion_error_emits_partial_report(monkeypatch: pytest.MonkeyPa
     assert isinstance(report_obj, FindingsReport)
     assert report_obj.findings == []
     assert report_obj.summary is not None and "recursion" in report_obj.summary.lower()
+    assert report_obj.exit_code == 0  # advisory — never crashes the pipeline
+
+
+def test_graph_node_timeout_emits_empty_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A NodeTimeoutError from the TimeoutPolicy must degrade, not crash (OQ#1).
+
+    Discovered live during Phase 2 (max_tokens raise → reasoning model reasons
+    past the 120s run_timeout). LangGraph raises ``NodeTimeoutError`` from the
+    TimeoutPolicy enforcement OUTSIDE the checks node body, so the in-node
+    Phase-1 error boundary can't catch it — and ``arun_review`` caught only
+    ``GraphRecursionError``, so the pipeline crashed. A timeout IS a model-call
+    failure; OQ#1 ("any model-call failure degrades / never crash the pipeline")
+    covers it. Mirrors the recursion fail-safe pattern.
+    """
+    from langgraph.errors import NodeTimeoutError
+
+    import reviewer_target_o_meter.graph as graph_mod
+
+    class _SlowBoomGraph:
+        async def ainvoke(self, *_a, **_kw):
+            raise NodeTimeoutError("checks", 120.001, kind="run", run_timeout=120.0)
+
+    monkeypatch.setattr(graph_mod, "build_graph", lambda c: _SlowBoomGraph())
+    inputs = {"repo_path": "/repo", "diff": "d", "context": None, "plan": None, "findings": []}
+    report_obj = graph_mod.run_review(_cfg(), inputs)
+    assert isinstance(report_obj, FindingsReport)
+    assert report_obj.findings == []
+    assert report_obj.summary is not None and "timeout" in report_obj.summary.lower()
     assert report_obj.exit_code == 0  # advisory — never crashes the pipeline

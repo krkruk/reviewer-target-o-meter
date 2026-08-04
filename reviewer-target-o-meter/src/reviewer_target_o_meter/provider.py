@@ -18,9 +18,14 @@ from .findings import FindingsReport
 
 # Reasoning tokens are emitted separately from the structured payload; set generous
 # max_tokens so reasoning + JSON both fit and the JSON doesn't truncate mid-generation
-# (research.md:316-319). Set as a field after construction (the typed __init__ overloads
-# don't list it, though it is a valid model field).
-_MAX_TOKENS = 8192
+# (research.md:316-319). 8192/16384 proved too tight for the nemotron reasoning model
+# on a large diff — it exhausted the budget before emitting JSON, returning `choices: None`
+# (the live crash; see graph-bugfixing plan). Raised to 60000 so the reasoning model
+# has ample room to reason AND emit the full FindingsReport JSON; the success-path
+# usage breadcrumb (nodes.py) validates whether more is needed.
+# Set as a field after construction (the typed __init__ overloads don't list it,
+# though it is a valid model field).
+_MAX_TOKENS = 60000
 
 
 def build_llm(config: Config) -> ChatOpenAI:

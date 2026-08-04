@@ -1,4 +1,4 @@
-"""Prompt-invariant tests for the ``checks`` node's system prompt.
+"""Prompt-invariant tests for the ``checks`` node's system prompt + usage-telemetry.
 
 These are offline guards over ``_SYSTEM_PROMPT``'s load-bearing invariants — the
 lines the product hypothesis depends on (S-01 plan §1.2). They lock the
@@ -6,10 +6,16 @@ diff-scoping protocol, plan-tolerance conditional, no-execution rule, the
 per-dimension cap reference, and the three review-lens names, so a future edit
 cannot silently drop the single most load-bearing line.
 
-No model call: these assert on the module-level f-string only.
+The ``_extract_usage`` tests (Phase 2, H-B) guard the best-effort usage-telemetry
+probe: it must read ``usage_metadata``/``response_metadata`` from the agent
+result's last message and NEVER raise when metadata or messages are absent.
+
+No model call: these assert on the module-level f-string / pure helper only.
 """
 
 from __future__ import annotations
+
+from typing import Any, ClassVar
 
 from reviewer_target_o_meter.agent.nodes import (
     _SYSTEM_PROMPT,
@@ -78,3 +84,94 @@ class TestSystemPromptInvariants:
         assert "plan drift" in PROMPT_LOWER
         assert "safety" in PROMPT_LOWER
         assert "test coverage" in PROMPT_LOWER
+
+
+# --- usage telemetry probe (Phase 2, H-B) ---
+
+
+class TestExtractUsageBestEffort:
+    """``_extract_usage`` is the best-effort token/usage probe on the success path.
+
+    It reads ``usage_metadata``/``response_metadata`` from the agent result's last
+    message (mirroring the shapes the real agent and the test ``_FakeAgent``
+    return) and MUST NOT raise when metadata or messages are absent — missing
+    metadata means skip the breadcrumb, never a crash (plan §Phase 2.2 contract).
+    """
+
+    def test_reads_usage_from_last_ai_message(self) -> None:
+        """A normal completion surfaces ``usage_metadata`` + ``response_metadata`` on
+        the last message. The probe pulls input/output/total tokens + finish_reason.
+        """
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _extract_usage
+
+        msg = AIMessage(
+            content="{}",
+            usage_metadata={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+            response_metadata={"finish_reason": "stop"},
+        )
+        result = {"messages": [msg]}
+        usage = _extract_usage(result)
+        assert usage is not None
+        assert usage.input_tokens == 100
+        assert usage.output_tokens == 50
+        assert usage.total_tokens == 150
+        assert usage.finish_reason == "stop"
+
+    def test_returns_none_when_no_messages(self) -> None:
+        """The ``_FakeAgent`` test fixture returns ``{"messages": []}``; the probe
+        must skip (return None) rather than index-error.
+        """
+        from reviewer_target_o_meter.agent.nodes import _extract_usage
+
+        assert _extract_usage({"messages": []}) is None
+        assert _extract_usage({}) is None
+        assert _extract_usage(None) is None  # type: ignore[arg-type]
+
+    def test_returns_none_when_last_message_lacks_usage_metadata(self) -> None:
+        """A message without ``usage_metadata`` (e.g. a HumanMessage, or a stripped
+        tool message) must skip the breadcrumb — never raise.
+        """
+        from langchain.messages import HumanMessage
+
+        from reviewer_target_o_meter.agent.nodes import _extract_usage
+
+        result = {"messages": [HumanMessage(content="hi")]}
+        assert _extract_usage(result) is None
+
+    def test_returns_none_when_usage_metadata_incomplete(self) -> None:
+        """A partial ``usage_metadata`` (missing token keys) must skip, not crash.
+        Defensive against the free-tier model attaching a malformed usage block at
+        runtime (AIMessage's constructor rejects this, but the helper can't assume
+        its input is constructor-validated). Uses a stub message to exercise the
+        helper's own try/except.
+        """
+        from reviewer_target_o_meter.agent.nodes import _extract_usage
+
+        class _StubMsg:
+            usage_metadata: ClassVar[Any] = {"input_tokens": 10}  # missing output/total
+            response_metadata: ClassVar[Any] = {"finish_reason": "stop"}
+
+        assert _extract_usage({"messages": [_StubMsg()]}) is None
+
+    def test_reads_structured_response_messages_shape(self) -> None:
+        """The ``_extract_findings`` helper already tolerates the
+        ``structured_response`` + ``messages`` shape the real agent exposes; the
+        usage probe must read the last message from that same shape.
+        """
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _extract_usage
+
+        msg = AIMessage(
+            content="{}",
+            usage_metadata={"input_tokens": 7, "output_tokens": 3, "total_tokens": 10},
+            response_metadata={"finish_reason": "length"},
+        )
+        result = {"structured_response": object(), "messages": [msg]}
+        usage = _extract_usage(result)
+        assert usage is not None
+        assert usage.finish_reason == "length"
+        assert usage.output_tokens == 3
+

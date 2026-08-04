@@ -107,13 +107,16 @@ OpenAI-compatible endpoint. You need:
 2. Network egress to `https://openrouter.ai/api/v1` (or your custom
    `OPENROUTER_BASE_URL`).
 
-**Cost model:** the default model is a free Nemotron variant
-(`nvidia/nemotron-3-super-120b-a12b:free`) that supports tools +
-structured-outputs, so a zero-cost run is possible. Override `MODEL` to use a
-paid slug for more stable signal in CI. The system prompt is large but
-amortized across agent steps via OpenRouter's cached-prompt discount; the
-existing cost/latency bounds (`recursion_limit=40`, `max_iterations=12`,
-`run_timeout=120s`) hold.
+**Cost model:** the default model is a paid DeepSeek slug
+(`deepseek/deepseek-v4-flash-0731`) that honors the strict structured-output
+contract and gives a stable signal on large diffs. Override `MODEL` to swap it
+(e.g. a free slug for zero-cost runs — the free Nemotron variant supports tools
++ structured-outputs but exhausts its token budget on large diffs). The system
+prompt is large but amortized across agent steps via OpenRouter's cached-prompt
+discount; the cost/latency bounds (`recursion_limit=40`, `max_iterations=12`,
+`run_timeout=120s`) hold. The diff input is capped at `MAX_DIFF_CHARS=45000`
+and the model's completion budget at `_MAX_TOKENS=60000` (reasoning + emitted
+JSON both fit).
 
 ## Environment variables
 
@@ -127,7 +130,7 @@ to `.env` and fill in the values. `.env` is gitignored.
 | Var | Required | Default | Purpose |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | **yes** | — | OpenRouter API key. Read at runtime; never echoed into output (leakage guardrail, FR-003). A missing key fails the step **before any work**. |
-| `MODEL` | no | `nvidia/nemotron-3-super-120b-a12b:free` | OpenRouter model slug. Override for a paid slug with stable CI signal. |
+| `MODEL` | no | `deepseek/deepseek-v4-flash-0731` | OpenRouter model slug. Override to swap the analysis model (e.g. a free slug for zero-cost runs). |
 | `OPENROUTER_BASE_URL` | no | `https://openrouter.ai/api/v1` | OpenAI-compatible endpoint. Override only to point at a self-hosted gateway / local server. |
 | `BASE_REF` | no | *(heuristic chain)* | Base ref to diff `HEAD` against. Resolution order: `BASE_REF` → `GITHUB_BASE_REF` → `origin/main` → `main` → `origin/master` → `master`. Set explicitly to force a base. |
 | `PR_NUMBER` | no (to post) | — | PR number to comment on. **Local:** set with a token to post. **GHA:** map from `${{ github.event.pull_request.number }}`. A non-integer disables posting (WARNING) rather than crashing. |

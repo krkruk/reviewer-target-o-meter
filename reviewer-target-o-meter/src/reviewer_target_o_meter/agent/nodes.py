@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from langchain.agents import create_agent
@@ -24,7 +25,7 @@ from pydantic import ValidationError
 from .._util import get_logger
 from ..config import Config
 from ..findings import Finding, FindingsReport, Severity
-from ..provider import build_llm
+from ..provider import _MAX_TOKENS, build_llm
 from ..state import ReviewState
 from .tools import structural_search, text_search
 
@@ -224,9 +225,41 @@ def build_checks_node(config: Config, agent: Any = None):
             )
             return {"findings": []}
         _log.info("node checks — agent invoke end")
+        _log_usage(result)
         return _extract_findings(result)
 
     return checks
+
+
+def _log_usage(result: Any) -> None:
+    """Emit a token/usage breadcrumb on the success path (Phase 2, H-B).
+
+    INFO per call so the operator sees completion-token volume; escalates to
+    WARNING when ``output_tokens`` approaches the ``_MAX_TOKENS`` ceiling or
+    ``finish_reason == "length"`` — the actionable "switch to a more potent model
+    with a larger token budget" signal. The failure path is covered by the Phase-1
+    exception probe; this runs on success only. Best-effort via
+    :func:`_extract_usage` (never raises).
+    """
+    usage = _extract_usage(result)
+    if usage is None:
+        return  # missing metadata → skip the breadcrumb, never crash
+    near_ceiling = usage.output_tokens >= int(_MAX_TOKENS * 0.9)
+    truncated = usage.finish_reason == "length"
+    if near_ceiling or truncated:
+        _log.warning(
+            "node checks — model usage near ceiling: input=%d output=%d total=%d "
+            "finish_reason=%s (max_tokens=%d) — output is %s; switch to a more "
+            "potent model with a larger token budget",
+            usage.input_tokens, usage.output_tokens, usage.total_tokens,
+            usage.finish_reason, _MAX_TOKENS,
+            "truncated" if truncated else "near the ceiling",
+        )
+    else:
+        _log.info(
+            "node checks — model usage: input=%d output=%d total=%d finish_reason=%s",
+            usage.input_tokens, usage.output_tokens, usage.total_tokens, usage.finish_reason,
+        )
 
 
 def _extract_response_shape(exc: BaseException) -> str:
@@ -264,6 +297,54 @@ def _extract_response_shape(exc: BaseException) -> str:
         return f"{type(raw).__name__}"
     except Exception:  # noqa: BLE001 — probe must never re-raise out of the except block
         return f"{type(raw).__name__}(unreadable)"
+
+
+@dataclass(frozen=True, slots=True)
+class Usage:
+    """Token/usage snapshot read from a successful model call's last message.
+
+    Used by the success-path breadcrumb (Phase 2, H-B): emitted as INFO, and
+    escalated to WARNING when ``output_tokens`` approaches the ``_MAX_TOKENS``
+    ceiling or ``finish_reason == "length"`` — the actionable "switch to a more
+    potent model" signal.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    finish_reason: str | None
+
+
+def _extract_usage(result: Any) -> Usage | None:
+    """Best-effort probe of token usage from the agent result's last message.
+
+    Reads ``usage_metadata`` (``input_tokens``/``output_tokens``/``total_tokens``)
+    and ``response_metadata`` (``finish_reason``) from the last message — the same
+    result shapes :func:`_extract_findings` tolerates (``structured_response`` +
+    ``messages``, bare ``messages``). Best-effort: missing metadata or messages →
+    ``None`` (the caller skips the breadcrumb). NEVER raises — the free-tier model
+    may return a malformed usage block, and a telemetry probe must not break the
+    success path.
+    """
+    msg: Any = None
+    if isinstance(result, dict):
+        msgs = result.get("messages")
+        if isinstance(msgs, list) and msgs:
+            msg = msgs[-1]
+    if msg is None:
+        return None
+    usage_meta = getattr(msg, "usage_metadata", None)
+    if not isinstance(usage_meta, dict):
+        return None
+    try:
+        return Usage(
+            input_tokens=int(usage_meta["input_tokens"]),
+            output_tokens=int(usage_meta["output_tokens"]),
+            total_tokens=int(usage_meta["total_tokens"]),
+            finish_reason=str(getattr(msg, "response_metadata", {}).get("finish_reason")),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _extract_findings(result: Any) -> dict[str, Any]:
@@ -313,15 +394,14 @@ def report(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
 
     ordered = sorted(report_obj.findings, key=lambda f: (_SEVERITY_ORDER[f.severity], f.file, f.line))
     capped = _cap_per_dimension(ordered)
-    findings_out = [f.model_dump() for f in capped]
+    final_report = report_obj.model_copy(update={"findings": capped})
 
-    return {
-        "findings": findings_out,
-        "summary": report_obj.summary,
-        "overall_verdict": report_obj.overall_verdict,
-        "exit_code": report_obj.exit_code,
-        "report": report_obj.model_copy(update={"findings": capped}),
-    }
+    # Emit ONLY the validated report object. Do NOT re-emit ``findings`` — it uses
+    # the ``add`` reducer (state.py), so re-emitting would append the validated
+    # finding onto the one ``checks`` already added, doubling every finding (the
+    # duplicate-findings bug). The validated findings live inside ``report``; the
+    # ``report`` key is last-wins (no reducer) so it replaces cleanly.
+    return {"report": final_report}
 
 
 def _cap_per_dimension(ordered: list[Finding]) -> list[Finding]:
