@@ -80,6 +80,24 @@ PR_NUMBER=<n> GITHUB_TOKEN=<tok> GITHUB_REPOSITORY=<owner>/<repo> \
 A bad token degrades to stdout JSON + a `WARNING:` on stderr; the exit stays
 advisory (no crash, no broken comment).
 
+## What streams where (stdout vs stderr)
+
+The tool keeps stdout and stderr strictly separate, so the GHA step log shows
+both with no workflow edit:
+
+- **stdout** — the machine-readable `FindingsReport` JSON (FR-007). Never parse
+  stderr for the report.
+- **stderr** — the human-readable **INFO step trace** (review start/mode → diff
+  computed → context/plan loaded → each graph node → review-complete findings/
+  flagged/exit-code counts → post attempt/result), **and**, just before exit, a
+  **Markdown preview** of the exact comment that is (or would be) posted to the
+  PR. The preview is the payload, not a log line, so it is always shown.
+
+Set `LOG_LEVEL=WARNING` to silence the step trace and keep just the preview, or
+`LOG_LEVEL=DEBUG` for everything (default `INFO`). Logs are metadata-only — they
+never carry the diff/context/plan/report bodies; the report body is shown once,
+via the dedicated preview.
+
 ## Degrade behavior
 
 The tool never fails CI on its own output:

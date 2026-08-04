@@ -135,11 +135,20 @@ to `.env` and fill in the values. `.env` is gitignored.
 | `GITHUB_REPOSITORY` | no (to post) | — | `owner/repo`. **GHA:** auto-provided — do not set manually. **Local:** set to post. |
 | `GITHUB_API_URL` | no | `https://api.github.com` | GitHub API root. **GHA:** auto-provided — do not set manually. |
 | `GITHUB_BASE_REF` | no | — | Target branch on `pull_request`. **GHA:** auto-provided. Ignored if `BASE_REF` is set. |
+| `LOG_LEVEL` | no | `INFO` | Stderr step-trace verbosity: `DEBUG`/`INFO`/`WARNING`/`ERROR`. Governs the INFO trace on stderr only — stdout JSON is never affected. The Markdown preview of the report is always shown (it is the payload, not a log line). |
 
 > **Mode switching summary** — stdout JSON is the default; PR posting activates
 > only when `PR_NUMBER` + `GITHUB_TOKEN` + `GITHUB_REPOSITORY` are all present.
 > Reading source and computing the diff are local operations and need **no**
 > token.
+
+> **stdout vs stderr** — stdout is the machine-readable `FindingsReport` JSON
+> (FR-007); never parse stderr. stderr carries the human-readable INFO step trace
+> (review start/mode → diff/context/plan → each graph node → review-complete
+> counts → post attempt/result) **and**, just before exit, a Markdown preview of
+> the exact `render_comment()` payload that is (or would be) posted to the PR.
+> In the GitHub Actions step log both stream by default (no workflow edit). Set
+> `LOG_LEVEL=WARNING` to silence the trace and keep just the preview.
 
 ## Run locally
 
