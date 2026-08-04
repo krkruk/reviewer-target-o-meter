@@ -32,7 +32,10 @@ def build_llm(config: Config) -> ChatOpenAI:
     """Build the OpenAI-compatible client pointing at OpenRouter.
 
     Never hardcodes or echoes the key; temperature=0 for "consistent across
-    re-runs" (prd.md:97).
+    re-runs" (prd.md:97). Passes OpenRouter's ``reasoning.effort`` via
+    ``extra_body`` (the openai-python native channel) so the deepseek reasoning
+    model doesn't overspend reasoning tokens on large diffs (fine-tune-context
+    diagnosis: 7508 reasoning tokens on turn 1 inflated latency into a timeout).
     """
     llm = ChatOpenAI(
         model=config.model,
@@ -40,6 +43,7 @@ def build_llm(config: Config) -> ChatOpenAI:
         api_key=SecretStr(config.api_key),
         temperature=0,
         default_headers=config.attribution_headers,
+        extra_body={"reasoning": {"effort": config.reasoning_effort}},
     )
     llm.max_tokens = _MAX_TOKENS
     return llm
