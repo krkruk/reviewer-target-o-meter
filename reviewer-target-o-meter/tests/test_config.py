@@ -89,16 +89,16 @@ def test_post_to_github_false_when_repository_missing(monkeypatch: pytest.Monkey
 
 
 def test_post_to_github_false_when_pr_number_non_integer(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     # A non-integer PR_NUMBER parses to None (forgiving) + a WARNING; the
     # switch stays False rather than crashing the pipeline.
     _set_pr_env(monkeypatch, pr="not-a-number")
-    cfg = Config.from_env()
+    with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+        cfg = Config.from_env()
     assert cfg.pr_number is None
     assert cfg.post_to_github is False
-    err = capsys.readouterr().err
-    assert "WARNING" in err and "PR_NUMBER" in err
+    assert "WARNING" in caplog.text and "PR_NUMBER" in caplog.text
 
 
 def test_config_reads_base_ref_and_api_url(monkeypatch: pytest.MonkeyPatch) -> None:

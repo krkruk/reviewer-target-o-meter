@@ -560,4 +560,3 @@ trace, which is the intended outcome.
 #### Manual
 
 - [ ] 4.4 Push to `./target-o-meter` → `review` workflow fires; GHA step log shows the full INFO step trace AND the Markdown preview; comment posts as before; run exits green even when findings flagged (record PR + run id)
-- [ ] 4.5 Re-run with `OPENROUTER_API_KEY` unset → fails fast before any work; no comment posted, no preview emitted (confirm `continue-on-error` masking caveat)

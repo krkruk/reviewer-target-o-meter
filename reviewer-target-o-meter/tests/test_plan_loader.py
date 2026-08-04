@@ -140,17 +140,17 @@ def test_oversize_plan_is_truncated_with_marker(tmp_path: Path) -> None:
 
 
 def test_change_dir_without_plan_md_returns_none(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Diff-driven change resolves to a dir that has NO plan.md.
     _write(tmp_path / "context/changes/feature-x/frame.md", "frame only\n")
-    capfd.readouterr()  # clear
+    caplog.clear()
 
-    plan = load_plan(tmp_path, _diff("feature-x"))
+    with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+        plan = load_plan(tmp_path, _diff("feature-x"))
 
     assert plan is None
-    captured = capfd.readouterr()
-    assert "WARNING" in captured.err or "WARNING" in captured.out
+    assert "WARNING" in caplog.text
 
 
 # --- (h) single active change whose only doc is verification.md → None -------
@@ -186,7 +186,7 @@ def test_diff_touched_change_via_frame_md_resolves(tmp_path: Path) -> None:
 
 
 def test_unreadable_plan_file_degrades_to_none(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     if os.geteuid() == 0:
         pytest.skip("chmod 000 does not deny root; can't exercise the degrade path")
@@ -194,16 +194,16 @@ def test_unreadable_plan_file_degrades_to_none(
     _write(plan_path, "SECRET PLAN\n")
     os.chmod(plan_path, 0o200)  # write-only: owner cannot read
     os.chmod(plan_path.parent, stat.S_IRWXU)
-    capfd.readouterr()
+    caplog.clear()
 
     try:
-        plan = load_plan(tmp_path, _diff("feature-x"))
+        with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+            plan = load_plan(tmp_path, _diff("feature-x"))
     finally:
         os.chmod(plan_path, stat.S_IRWXU)
 
     assert plan is None
-    captured = capfd.readouterr()
-    assert "WARNING" in captured.err or "WARNING" in captured.out
+    assert "WARNING" in caplog.text
 
 
 # --- (F1) non-UTF-8 and oversized plans degrade instead of crashing ----------

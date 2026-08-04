@@ -133,7 +133,7 @@ def test_resolve_base_ci_var_origin_form_for_main(
 
 
 def test_compute_diff_degrades_when_base_unresolvable_in_ci(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The compute_diff caller path: when GITHUB_BASE_REF names a ref that isn't
     local and the heuristic can't recover, compute_diff must return "" + a
@@ -145,10 +145,10 @@ def test_compute_diff_degrades_when_base_unresolvable_in_ci(
     repo.git.branch("-D", "master")
     monkeypatch.setenv("GITHUB_BASE_REF", "master")
 
-    result = compute_diff(tmp_path, base_ref=None)
+    with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+        result = compute_diff(tmp_path, base_ref=None)
     assert result == ""
-    captured = capfd.readouterr()
-    assert "WARNING" in captured.err or "WARNING" in captured.out
+    assert "WARNING" in caplog.text
 
 
 def test_resolve_base_falls_back_to_heuristic(tmp_path: Path) -> None:
@@ -196,14 +196,14 @@ def test_oversize_diff_is_truncated_with_marker(tmp_path: Path) -> None:
 
 
 def test_non_git_dir_returns_empty_and_warns(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # tmp_path has no .git
-    result = compute_diff(tmp_path)
+    with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+        result = compute_diff(tmp_path)
 
     assert result == ""
-    captured = capfd.readouterr()
-    assert "WARNING" in captured.err or "WARNING" in captured.out
+    assert "WARNING" in caplog.text
 
 
 def test_compute_diff_never_raises_on_garbage_path(tmp_path: Path) -> None:

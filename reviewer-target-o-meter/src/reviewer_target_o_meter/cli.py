@@ -18,6 +18,7 @@ from pathlib import Path
 
 import typer
 
+from ._util import configure_logging
 from ._util import warn as _warn
 from .config import Config
 from .context_loader import load_context
@@ -41,6 +42,10 @@ def review(
     flagged, else 1 (advisory — FR-008; never blocks a merge).
     """
     config = Config.from_env()  # raises with a clear message if OPENROUTER_API_KEY is missing
+    # Bind logging to the runtime sys.stderr before any pipeline step runs, so
+    # breadcrumbs surface under typer's CliRunner capture in tests and stream to
+    # the GHA step log in PROD. Idempotent across invokes.
+    configure_logging(config.log_level)
 
     # Compute the diff once and feed it to both plan discovery and the graph —
     # don't diff twice. load_plan is None-tolerant (no plan discoverable → the

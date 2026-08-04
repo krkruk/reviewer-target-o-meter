@@ -104,7 +104,7 @@ def test_oversize_context_is_truncated_with_marker(tmp_path: Path) -> None:
 
 
 def test_unreadable_file_is_skipped_not_raised(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     if os.geteuid() == 0:
         pytest.skip("chmod 000 does not deny root; can't exercise the degrade path")
@@ -116,13 +116,13 @@ def test_unreadable_file_is_skipped_not_raised(
     os.chmod(secret.parent, stat.S_IRWXU)
 
     try:
-        # Must not raise; the unreadable file is skipped with a WARNING.
-        ctx = load_context(tmp_path)
+        with caplog.at_level("WARNING", logger="reviewer_target_o_meter"):
+            # Must not raise; the unreadable file is skipped with a WARNING.
+            ctx = load_context(tmp_path)
         assert ctx is not None
         assert "agents" in ctx
         assert "SECRET" not in ctx
-        captured = capfd.readouterr()
-        assert "WARNING" in captured.err or "WARNING" in captured.out
+        assert "WARNING" in caplog.text
     finally:
         # Restore so pytest can clean up.
         os.chmod(secret, stat.S_IRWXU)

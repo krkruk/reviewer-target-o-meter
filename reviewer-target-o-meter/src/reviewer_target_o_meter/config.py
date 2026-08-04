@@ -37,6 +37,9 @@ class Config(BaseModel):
     github_token: str | None = Field(default=None, repr=False)  # secret — never echo
     github_repository: str | None = None
     github_api_url: str = "https://api.github.com"
+    # stderr step-trace verbosity (INFO by default; the Markdown preview is
+    # independent of this — it is the payload, not a log line).
+    log_level: str = "INFO"
 
     # --- Cost / latency knobs (OQ#2 mechanism, ~5-min NFR prd.md:98) ---
     recursion_limit: ClassVar[int] = 40
@@ -74,6 +77,7 @@ class Config(BaseModel):
             github_token=_clean(os.environ.get("GITHUB_TOKEN")),
             github_repository=_clean(os.environ.get("GITHUB_REPOSITORY")),
             github_api_url=_clean(os.environ.get("GITHUB_API_URL")) or "https://api.github.com",
+            log_level=os.environ.get("LOG_LEVEL", "INFO").upper() or "INFO",
         )
 
     @property
