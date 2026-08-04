@@ -523,39 +523,39 @@ trace, which is the intended outcome.
 
 #### Manual
 
-- [ ] 1.5 `make run DIR=tests/fixtures/sample-repo` shows INFO output on stderr; stdout unchanged JSON
+- [x] 1.5 `make run DIR=tests/fixtures/sample-repo` shows INFO output on stderr; stdout unchanged JSON — 0b527fd (verified via verify-stdout-mode.sh)
 
 ### Phase 2: INFO breadcrumbs across the pipeline + the Markdown preview
 
 #### Automated
 
-- [ ] 2.1 `make check` passes (ruff + mypy src)
-- [ ] 2.2 `make test` green: breadcrumb + Markdown-preview assertions pass; existing assertions unchanged
-- [ ] 2.3 stdout-is-pure-JSON invariant holds across all `test_cli.py` cases
-- [ ] 2.4 metadata-only invariant (no input body text in log lines)
+- [x] 2.1 `make check` passes (ruff + mypy src) — 7d63c7f
+- [x] 2.2 `make test` green: breadcrumb + Markdown-preview assertions pass; existing assertions unchanged — 7d63c7f
+- [x] 2.3 stdout-is-pure-JSON invariant holds across all `test_cli.py` cases — 7d63c7f
+- [x] 2.4 metadata-only invariant (no input body text in log lines) — 7d63c7f
 
 #### Manual
 
-- [ ] 2.5 `make run DIR=tests/fixtures/sample-repo` — stderr shows full step trace + Markdown report; stdout unchanged JSON
-- [ ] 2.6 posting-mode run shows the step trace + preview in the GHA step log
+- [x] 2.5 `make run DIR=tests/fixtures/sample-repo` — stderr shows full step trace + Markdown report; stdout unchanged JSON — 7d63c7f (verified via verify-stdout-mode.sh)
+- [x] 2.6 posting-mode run shows the step trace + preview in the GHA step log — 7d63c7f (verified via verify-posting-mode.sh dry-run)
 
 ### Phase 3: Docs — `.env.example` + GHA/README visibility notes
 
 #### Automated
 
-- [ ] 3.1 `make check` passes (prose/markdown only, no code)
+- [x] 3.1 `make check` passes (prose/markdown only, no code) — 7440f01
 
 #### Manual
 
-- [ ] 3.2 `.env.example` documents `LOG_LEVEL`; integration/README note the stderr/stdout split + GHA streaming
+- [x] 3.2 `.env.example` documents `LOG_LEVEL`; integration/README note the stderr/stdout split + GHA streaming — 7440f01
 
 ### Phase 4: Real-pipeline validation (live consumer GHA + live smoke)
 
 #### Automated
 
-- [ ] 4.1 `make check` — ruff + mypy clean
-- [ ] 4.2 `make test` unaffected (new smoke test skipped without `SMOKE=1`)
-- [ ] 4.3 `SMOKE=1 OPENROUTER_API_KEY=… make llm-test` — logging smoke green against the consumer/sample checkout
+- [x] 4.1 `make check` — ruff + mypy clean — fd9b2d9
+- [x] 4.2 `make test` unaffected (new smoke test skipped without `SMOKE=1`) — fd9b2d9
+- [x] 4.3 `SMOKE=1 OPENROUTER_API_KEY=… make llm-test` — logging smoke green against the consumer/sample checkout — fd9b2d9
 
 #### Manual
 
