@@ -81,6 +81,18 @@ async def arun_review(config: Config, inputs: dict[str, Any]) -> FindingsReport:
         # checks node body, so the in-node Phase-1 error boundary can't catch it —
         # surfaced live when the raised max_tokens let the reasoning model reason
         # past the run_timeout. Degrade to the advisory empty report (exit 0).
+        # TEMPORARY — Phase 4 removes this: DEBUG probe of whatever the
+        # NodeTimeoutError exposes (the node name, the configured run_timeout, the
+        # elapsed time, and any partial agent state carried on the exception).
+        # The in-node usage breadcrumb (_log_usage) is never reached on this path,
+        # so this is the only visibility into the timeout. DEBUG-gated via _log
+        # (_util.get_logger), so it is off at the default INFO level.
+        _log.debug(
+            "timeout-path probe — node=%r exc_type=%s exc_attrs=%s",
+            getattr(exc, "node", "checks"),
+            type(exc).__name__,
+            {k: getattr(exc, k, None) for k in ("node", "timeout", "elapsed", "result", "state")},
+        )
         _log.warning(
             "graph degraded — node %r exceeded run timeout (%s); emitted empty report. "
             "If this repeats, switch to a faster/paid model or raise run_timeout.",

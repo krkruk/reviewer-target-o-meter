@@ -269,10 +269,84 @@ def build_checks_node(config: Config, agent: Any = None):
             )
             return {"findings": []}
         _log.info("node checks — agent invoke end")
+        # TEMPORARY — Phase 4 removes this: full raw dump of the agent result for
+        # the diagnosis window (operator request: "log the object you receive from
+        # the LLM so we can debug the issue"). DEBUG-gated, so off at default INFO.
+        _log.debug("checks raw result: %s", _redact_for_debug(result))
         _log_usage(result)
         return _extract_findings(result)
 
     return checks
+
+
+def _redact_for_debug(result: Any) -> str:
+    """Render the agent result for DEBUG-level inspection (TEMPORARY — Phase 4 removes this).
+
+    Best-effort, never raises. The diagnosis window (operator request: "log the
+    object you receive from the LLM so we can debug the issue") needs the message
+    sequence + per-message usage/finish metadata to answer the dimension-map
+    questions (iteration count, per-iteration tokens, tool-call pattern). Two
+    leakage bounds (prd.md:44): (a) DEBUG-gated — off at the default INFO level
+    used in CI/production; (b) ephemeral — removed entirely in Phase 4. Within
+    those bounds the operator's explicit request is the full raw dump, so this
+    renders message content; it only strips values whose dict keys look like
+    secrets (``api_key``/``authorization``/``token`` with a string value).
+    """
+    try:
+        import json
+
+        def _scrub(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                out = {}
+                for k, v in obj.items():
+                    kl = str(k).lower()
+                    if (kl in {"api_key", "apikey", "authorization", "x-api-key", "token"}) and isinstance(v, str):
+                        out[k] = "<redacted>"
+                    else:
+                        out[k] = _scrub(v)
+                return out
+            if isinstance(obj, list):
+                return [_scrub(x) for x in obj]
+            return obj
+
+        def _msg_summary(m: Any) -> dict[str, Any]:
+            # Render a compact per-message view: role/type, content length + head,
+            # tool calls, and the usage/finish metadata that drives the diagnosis.
+            content = getattr(m, "content", None)
+            content_str = content if isinstance(content, str) else repr(content)
+            entry: dict[str, Any] = {
+                "type": type(m).__name__,
+                "content_len": len(content_str),
+                "content_head": content_str[:500],
+            }
+            tc = getattr(m, "tool_calls", None)
+            if tc:
+                entry["tool_calls"] = [
+                    {"name": getattr(c, "name", None) or (c.get("name") if isinstance(c, dict) else None),
+                     "args": _scrub(getattr(c, "args", None) or (c.get("args") if isinstance(c, dict) else None))}
+                    for c in tc
+                ]
+            um = getattr(m, "usage_metadata", None)
+            if isinstance(um, dict):
+                entry["usage_metadata"] = _scrub(um)
+            rm = getattr(m, "response_metadata", None)
+            if isinstance(rm, dict):
+                entry["response_metadata"] = _scrub(rm)
+            return entry
+
+        if isinstance(result, dict):
+            view: dict[str, Any] = {"keys": list(result.keys())}
+            msgs = result.get("messages")
+            if isinstance(msgs, list):
+                view["message_count"] = len(msgs)
+                view["messages"] = [_msg_summary(m) for m in msgs]
+            sr = result.get("structured_response")
+            if sr is not None:
+                view["structured_response"] = _scrub(sr.model_dump() if hasattr(sr, "model_dump") else sr)
+            return json.dumps(view, default=str, ensure_ascii=False)
+        return repr(result)[:2000]
+    except Exception as exc:  # noqa: BLE001 — debug dump must never break the success path
+        return f"<redact_for_debug failed: {type(exc).__name__}: {exc}>"
 
 
 def _log_usage(result: Any) -> None:

@@ -566,13 +566,13 @@ untouched.
 
 #### Automated
 
-- [ ] 1.1 `make check` (ruff + mypy) green after instrumentation + knob changes
-- [ ] 1.2 `make test` green — including `test_config.py` (new timeout) and `test_cli.py:242-265` (invariant at default INFO)
+- [x] 1.1 `make check` (ruff + mypy) green after instrumentation + knob changes
+- [x] 1.2 `make test` green — including `test_config.py` (new timeout) and `test_cli.py:242-265` (invariant at default INFO)
 
 #### Manual
 
-- [ ] 1.3 `LOG_LEVEL=DEBUG make run DIR=tests/fixtures/sample-repo` shows the new DEBUG raw-dump lines on stderr
-- [ ] 1.4 At default LOG_LEVEL (INFO), the DEBUG lines are absent — metadata-only invariant holds
+- [x] 1.3 `LOG_LEVEL=DEBUG make run DIR=tests/fixtures/sample-repo` shows the new DEBUG raw-dump lines on stderr
+- [x] 1.4 At default LOG_LEVEL (INFO), the DEBUG lines are absent — metadata-only invariant holds
 
 ### Phase 2: Measure against PR #28 + diagnose
 

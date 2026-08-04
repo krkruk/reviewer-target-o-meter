@@ -31,9 +31,11 @@ from ._util import warn as _warn
 _log = get_logger(__name__)
 
 # Module constant (NOT env-driven in v1). Sized so the diff + context + plan +
-# reasoning + JSON all fit the model's token budget (raised alongside _MAX_TOKENS
-# in provider.py). The boundary-based _cap may overshoot up to the next file edge.
-MAX_DIFF_CHARS = 100000
+# reasoning + JSON all fit the model's token budget. Raised (fine-tune-context)
+# to 200000 proportional to the 1M-context paid model window; 200000 > PR #28's
+# 166670 raw chars, so that PR's diff fits untruncated. The boundary-based _cap
+# may overshoot up to the next file edge (documented behavior, not a bug).
+MAX_DIFF_CHARS = 200000
 
 # Heuristic base candidates tried in order when no override/CI var is set.
 _BASE_CANDIDATES = ("origin/main", "main", "origin/master", "master")

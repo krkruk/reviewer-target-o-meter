@@ -43,8 +43,14 @@ class Config(BaseModel):
 
     # --- Cost / latency knobs (OQ#2 mechanism, ~5-min NFR prd.md:98) ---
     recursion_limit: ClassVar[int] = 40
-    max_iterations: ClassVar[int] = 12
-    run_timeout: ClassVar[int] = 120  # seconds — enforced via TimeoutPolicy on `checks`
+    # Starting hypothesis (fine-tune-context): lower the iteration cap to bound
+    # worst-case wall-clock by reducing full-diff re-sends. Hypothesis to validate
+    # in diagnosis.md — fewer iterations may reduce finding depth.
+    max_iterations: ClassVar[int] = 8
+    # Starting hypothesis (fine-tune-context); see diagnosis.md for the measured
+    # final value. Raised from 120 to give a paid 1M-context model room to reason
+    # over a large diff without degrading to an empty report.
+    run_timeout: ClassVar[int] = 300  # seconds — enforced via TimeoutPolicy on `checks`
 
     # --- OpenRouter attribution headers (set on the ChatOpenAI client) ---
     ATTRIBUTION_HEADERS: ClassVar[dict[str, str]] = {
