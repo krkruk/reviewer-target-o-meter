@@ -2,210 +2,238 @@
 
 ## Overview
 
-Raise the reviewer's recall on subtle reliability/maintainability smells by
-editing the single safety lens in `_SYSTEM_PROMPT` (`agent/nodes.py`). A live
-validation run caught 4 of 6 planted defects but missed a bare
-`except Exception` (swallowed error) and an unbounded module-level dict — both
-sit in code the prompt's "Report only substantive issues" gate likely
-suppressed. The fix softens that gate for a specific enumerated class of
-patterns (error-suppression, unbounded growth, silent failure) without
-touching diff-scoping, severity calibration, or the per-dimension cap.
+Two coupled goals, both driven by the mock-defect validation:
+1. **Raise recall** so all 6 planted defects in the mock change are caught,
+   stable across runs (the pre-fine-tune A/B caught 4/6; a first softening
+   attempt then hit 0 on variance, proving a single run can't certify recall).
+2. **Add an `optional_findings` section** — a second, style-pickiness bucket
+   (cap 3) that always emits something meaningful reflecting the code but
+   never blocks the PR (never affects exit code). Reuses the `Finding` schema.
+
+The two are coupled because the style bucket lives in the same prompt and
+report schema as the main findings, and both surface in the same renderers.
 
 ## Current State Analysis
 
-The reviewer's system prompt (`nodes.py:48-143`) is a single f-string with a
-load-bearing section order: role → hard rules → three lenses → emit mapping →
-severity/impact/verdict → grammar + caps. The **Safety, quality & pattern
-compliance** lens (`nodes.py:103-110`) reads:
-
-> over the changed source files, look for security (...), performance (N+1,
-> unbounded iteration, missing pagination), reliability (missing error handling
-> at external boundaries, races, leaks), data-safety (...), and substantive
-> pattern mismatches vs 1-2 sibling files (...). Scale pattern depth to change
-> size (≤3 files → minimal pattern effort). **Report only substantive issues.**
-
-Two problems surfaced in the validation run (log: `/tmp/mock_review_run2.log`,
-4/6 caught):
-
-1. **"Report only substantive issues" is a recall suppressor.** The model read
-   a swallowed `except Exception: return {}` in `stats()` and an unbounded
-   `defaultdict(list)` global as *not substantive enough* — both are real
-   reliability smells but below the bar that phrase sets. The phrase gives the
-   model permission to self-suppress anything that "feels minor."
-2. **The reliability list is incomplete.** "missing error handling at external
-   boundaries" names *absent* handling, but not *present-but-hostile* handling
-   — bare `except Exception` that swallows and returns a default, hiding the
-   failure. Likewise "unbounded iteration" is framed as a performance loop
-   issue, not as unbounded *state accumulation* (a collection that grows
-   forever in a long-lived process).
+- **Phase 1 shipped** (`5652b50`): the safety lens was softened — bare/swallowing
+  `except` + unbounded-state-accumulation added to the pattern list; "Report
+  only substantive issues" replaced with recall-positive OBSERVATION guidance.
+  137 tests green. The live A/B then returned **0 findings** (LLM variance at
+  temperature=0 across a changed prompt — a single run is not signal).
+- **The mock change** (6 planted defects) lives at git commit `aefe369` and was
+  checked out to a worktree at `/tmp/mock-defect-review` for the A/B. The 6
+  defects: hardcoded token, off-by-one, untested branches, duplicated logic,
+  bare `except Exception`, unbounded global dict.
+- **Schema today** (`findings.py`): `FindingsReport{findings, summary,
+  overall_verdict}`. `exit_code` derives from `findings.flagged` (CRITICAL/
+  WARNING). `Finding` requires a file:line anchor (FR-009), severity, impact,
+  dimension, ≤2 fixes.
+- **Render surfaces**: GitHub Markdown (`github.py` — table + collapsible
+  details, `F{n}` ids injected at render) and stdout JSON (`cli.py:_emit_stdout`
+  — `F{n}` ids injected into `model_dump` payload).
+- **The `report` node** (`nodes.py`) re-validates `findings`, sorts, caps per
+  dimension (5), injects ids, computes exit code. It emits ONLY `{"report": ...}`
+  (the dedup fix from the prior change).
 
 ### Key Discoveries:
 
-- **The prompt is f-string-spliced at import time** (`nodes.py:48`). The
-  `MAX_FINDINGS_PER_DIMENSION` constant is interpolated via `{...}`. Any edit
-  must preserve valid f-string syntax (escape literal `{`/`}` as `{{`/`}}`).
-- **Six prompt-invariant tests lock specific phrases** (`test_nodes.py:29-86`):
-  diff-scoping anchor rule, active-investigation protocol, plan-tolerance
-  conditional, no-execution rule, per-dimension cap reference, three-lens
-  names. These must stay green; the safety-lens edit touches none of them
-  directly, but the "three lenses named" test asserts `"safety" in prompt` —
-  the lens header must retain that word.
-- **The "Report only substantive issues" phrase is NOT asserted on by any
-  test.** It's safe to remove/replace without touching invariants.
-- **Severity calibration is prompt-resident, not schema-enforced** (AGENTS.md
-  §c/h). Adding "flag at OBSERVATION when not critical/warning" keeps the
-  model from inflating severity on the newly-enumerated patterns.
-- **Diff-scoping stays hard.** The edit is *within* the safety lens — it does
-  not relax the "never flag a file the PR did not change" rule. The two missed
-  defects were on changed files; recall failed on the *pattern recognition*,
-  not the scoping.
+- **`optional_findings` reuses `Finding`** — confirmed. The model emits
+  style/pickiness observations as `Finding` objects (severity=OBSERVATION) into
+  a separate capped list. No new schema type; all validators reuse.
+- **Exit code is untouched** by optional — confirmed. `exit_code` derives only
+  from `findings.flagged`; optional is purely informational.
+- **The renderers must learn a second section** — a clearly-labeled "Optional
+  style observations" block (Markdown) / `optional_findings` key (JSON), with
+  `O{n}` ids to distinguish from `F{n}`.
+- **LLM variance is real.** temperature=0 does NOT guarantee identical output
+  across prompt edits (the whole token sequence shifts). The acceptance bar is
+  "all 6 caught, stable across 2 consecutive runs" — not a single run.
+- **The prompt must direct style pickiness into `optional_findings`** so the
+  main `findings` list stays focused on real defects and doesn't get diluted
+  by style noise.
 
 ## Desired End State
 
-- The reviewer flags error-suppression (bare/swallowing `except`), unbounded
-  state growth, and silent-failure (return-a-default-on-error) patterns when
-  they appear in changed files — at OBSERVATION when not CRITICAL/WARNING.
-- The "Report only substantive issues" gate is replaced with recall-positive
-  guidance for these specific pattern classes; trivial/style noise is still
-  suppressed (we are NOT turning this into a linter).
-- Diff-scoping, severity calibration, and the per-dimension cap (5) are
-  unchanged. The six prompt-invariant tests stay green.
-- A re-run against the `rate_limiter` mock change catches the 2 previously-
-  missed defects (bare `except Exception`, unbounded `_posts` dict) — ideally
-  6/6, with no severity inflation on the 4 it already caught.
+- `FindingsReport` carries an `optional_findings: list[Finding]` (cap 3),
+  emitted by the model (style/pickiness), rendered in both surfaces (Markdown
+  "Optional style observations" section + JSON key), with `O{n}` ids, and
+  **never** affecting `exit_code`.
+- The reviewer catches **all 6** planted mock defects in the main `findings`,
+  stable across 2 consecutive runs, AND emits 1-3 meaningful optional style
+  findings on every review.
+- No severity inflation; diff-scoping unchanged; cap (5) on main findings
+  unchanged.
 
 ## What We're NOT Doing
 
-- **Not raising `MAX_FINDINGS_PER_DIMENSION`** (stays 5). The suppressor was
-  the "substantive" gate + incomplete pattern list, not the cap. Revisit only
-  if recall is still low after this change.
-- **Not relaxing diff-scoping.** Untouched files stay off-limits; the edit is
-  purely within the safety lens's pattern enumeration.
-- **Not changing severity calibration rules.** CRITICAL/WARNING stay reserved
-  for real correctness/security defects; the new patterns default to
-  OBSERVATION unless they cause a real defect.
-- **Not switching the structured-output strategy or model.** DeepSeek + strict
-  json_schema stays (locked in AGENTS.md §d).
-- **Not adding new tools or dimensions.** The 7-dimension enum is unchanged.
+- **Not adding a new schema type** — `optional_findings` reuses `Finding`.
+- **Not letting optional affect exit code** — advisory-on-advisory only.
+- **Not relaxing diff-scoping** or raising the main per-dimension cap (5).
+- **Not changing the model or structured-output strategy** (DeepSeek + strict
+  json_schema stays).
+- **Not raising temperature** to chase determinism — variance is handled by the
+  "stable across 2 runs" bar, not by changing the determinism knob.
 
 ## Implementation Approach
 
-One surgical edit to the Safety lens block in `_SYSTEM_PROMPT`:
-
-1. **Replace "Report only substantive issues"** with recall-positive guidance:
-   explicitly enumerate the pattern classes the validation missed
-   (error-suppression, unbounded growth, silent-failure), and direct the model
-   to flag them at OBSERVATION when they don't rise to CRITICAL/WARNING —
-   while keeping a "still suppress trivial style/formatting noise" clause so
-   we don't become a linter.
-
-2. **Extend the reliability sub-list** to name *present-but-hostile* error
-   handling (bare/swallowing `except` that hides failures) alongside the
-   existing "missing error handling," and add "unbounded state accumulation"
-   (a collection that grows without bound in a long-lived process) to the
-   performance/reliability list.
-
-3. **Add a prompt-invariant test** asserting the new recall-positive phrasing
-   is present and the old "report only substantive issues" gate is gone — so a
-   future edit can't silently re-suppress recall.
+- **Phase 2 — `optional_findings` schema + render + prompt wiring** (TDD):
+  add the field to `FindingsReport` (cap 3, reuses Finding, excluded from
+  exit_code); thread it through the `report` node, both renderers, the stdout
+  JSON emit; add the prompt section directing style pickiness into it. Unit
+  tests for the cap, the exit-code isolation, and the render.
+- **Phase 3 — recall tuning + stable validation** (iterative): run the A/B
+  against the mock change, iterate on the prompt until all 6 defects are caught
+  across 2 consecutive runs AND optional findings render. This is prompt-only
+  iteration gated on the live signal — no schema change.
 
 ## Critical Implementation Details
 
-- **F-string syntax.** `_SYSTEM_PROMPT` is an f-string evaluated at import.
-  The new text must not introduce unescaped `{`/`}`; any literal braces must
-  be `{{`/`}}`. The existing prompt has no literal braces today, so this is
-  only a risk if the new wording uses them (avoid).
-- **Keep the lens header word "safety".** `test_three_review_lenses_named`
-  asserts `"safety" in PROMPT_LOWER`. The lens bullet starts
-  "Safety, quality & pattern compliance" — leave that phrase intact.
+- **`optional_findings` must be EXCLUDED from `exit_code`/`flagged`.** Those
+  properties iterate `self.findings` only; adding a sibling list must not leak
+  into them. Keep the isolation explicit (don't refactor `flagged` to scan both).
+- **Strict structured output.** `create_agent(..., response_format=
+  ProviderStrategy(FindingsReport, strict=True))` generates the JSON schema
+  from the pydantic model — adding the field automatically exposes it to the
+  model. The `max_length=3` constraint is emitted to the schema.
+- **F{n} vs O{n} ids.** Main findings keep `F{n}`; optional uses `O{n}` so the
+  two lists are distinguishable in both render surfaces. Inject at render (the
+  existing convention — models are unreliable at sequential ids).
 
 ---
 
-## Phase 1: softening the safety lens + recall-positive pattern enumeration
+## Phase 1: softening the safety lens (DONE — 5652b50)
+
+> Already shipped: the safety lens now enumerates swallowing-`except` +
+> unbounded-state-accumulation and replaced the "substantive" gate with
+> recall-positive OBSERVATION guidance. 4 prompt-invariant tests added. Kept
+> here for continuity; no further work.
+
+---
+
+## Phase 2: `optional_findings` schema + render + prompt wiring
 
 ### Overview
 
-Edit the single Safety lens block in `_SYSTEM_PROMPT` to enumerate the
-error-suppression / unbounded-growth / silent-failure patterns and replace the
-"Report only substantive issues" recall gate with recall-positive guidance
-(OBSERVATION for non-critical smells, still suppress style noise).
+Add the style-pickiness bucket end-to-end: schema field (cap 3, reuses
+Finding, exit-code-isolated), `report`-node threading, both render surfaces
+(Markdown section + JSON key with `O{n}` ids), and the prompt section directing
+the model to emit 1-3 style observations there on every review.
 
 ### Changes Required:
 
-#### 1. Extend the safety lens's reliability + recall guidance
+#### 1. Add `optional_findings` to `FindingsReport`
+
+**File**: `reviewer-target-o-meter/src/reviewer_target_o_meter/findings.py`
+
+**Intent**: The model needs a second, capped bucket for style/pickiness that
+never affects the advisory exit code.
+
+**Contract**: Add `optional_findings: list[Finding] = Field(default_factory=list,
+max_length=3)` to `FindingsReport`. Do NOT change `flagged` or `exit_code` —
+they iterate `self.findings` only, so the new list is automatically isolated.
+The field is a normal pydantic field (visible in the JSON schema the model
+sees via `ProviderStrategy(..., strict=True)`).
+
+#### 2. Thread `optional_findings` through the `report` node
 
 **File**: `reviewer-target-o-meter/src/reviewer_target_o_meter/agent/nodes.py`
 
-**Intent**: The validation missed a swallowed `except Exception` and an
-unbounded global dict because (a) the reliability list named only *missing*
-error handling, not *present-but-hostile* handling, and (b) the "Report only
-substantive issues" gate let the model self-suppress them. Extend the list and
-replace the gate so these patterns are flagged.
+**Intent**: The `report` node must pass the optional findings through to the
+emitted report object (after the existing re-validate/sort/cap on main
+findings). Optional findings are NOT sorted/capped per-dimension — they have
+their own `max_length=3` cap at the schema level; just pass them through.
 
-**Contract**: In the "Safety, quality & pattern compliance" lens bullet
-(`nodes.py:103-110`):
+**Contract**: In `report()`, after building `final_report`, carry
+`optional_findings` from the raw state into the report object. The
+`_extract_findings` path returns only main findings today; extend it (or read
+`state.get("optional_findings", [])`) so the report object's
+`optional_findings` is populated. Keep the cap enforcement in the schema.
 
-- In the reliability parenthetical, after "missing error handling at external
-  boundaries, races, leaks", add **present-but-hostile error handling**: a
-  bare or broad `except` that swallows the error and returns a default
-  (hiding failures from the caller/operator). Keep it distinct from "missing"
-  handling.
-- In the performance parenthetical, after "unbounded iteration, missing
-  pagination", add **unbounded state accumulation**: a collection (especially
-  module-level / process-global) that grows without bound over the process
-  lifetime with no eviction.
-- Replace the sentence "Report only substantive issues." with recall-positive
-  guidance: "Flag the patterns above even when minor — emit them at
-  OBSERVATION severity when they don't cause a real correctness/security
-  defect; reserve CRITICAL/WARNING for genuine defects. Still suppress
-  trivial style/formatting noise (naming, whitespace, import order) — this is
-  a critical-point reviewer, not a linter."
+#### 3. Render `optional_findings` in both surfaces
 
-The lens bullet keeps its header "Safety, quality & pattern compliance" (the
-word "safety" is asserted on by `test_three_review_lenses_named`).
+**File**: `reviewer-target-o-meter/src/reviewer_target_o_meter/github.py`
+and `reviewer-target-o-meter/src/reviewer_target_o_meter/cli.py`
 
-#### 2. Prompt-invariant test: recall-positive phrasing present, suppressor gone
+**Intent**: Surface the style observations distinctly so they're never confused
+with blocking findings.
 
-**File**: `reviewer-target-o-meter/tests/test_nodes.py`
+**Contract**:
+- `github.py:render_comment` — after the main findings details block, add a
+  second clearly-labeled section (e.g. a separate `<details>` "Optional style
+  observations") with `O{n}` ids (separate enumerate counter from `F{n}`).
+- `cli.py:_emit_stdout` — inject `O{n}` ids into the `optional_findings` list
+  in the JSON payload (parallel to the `F{n}` injection on main findings).
 
-**Intent**: Lock the recall-positive change so a future edit can't silently
-re-introduce the "substantive" gate or drop the new pattern enumeration.
+#### 4. Prompt: direct style pickiness into `optional_findings`
 
-**Contract**: Add tests in `TestSystemPromptInvariants`:
+**File**: `reviewer-target-o-meter/src/reviewer_target_o_meter/agent/nodes.py`
+(`_SYSTEM_PROMPT`)
 
-- `test_substantive_gate_removed`: assert `"report only substantive issues"`
-  is NOT in `PROMPT_LOWER` (the suppressor is gone).
-- `test_error_suppression_pattern_named`: assert the prompt names
-  swallowing/bare-`except` error handling (e.g. `"swallow"` or
-  `"bare"` + `"except"` present) — covers the `stats()` defect class.
-- `test_unbounded_growth_pattern_named`: assert the prompt names unbounded
-  state accumulation (e.g. `"unbounded"` present) — covers the `_posts`
-  defect class.
-- `test_observation_severity_recall_guidance_present`: assert the prompt
-  directs OBSERVATION severity for non-critical smells (e.g.
-  `"observation severity"` present).
+**Intent**: The model must emit 1-3 meaningful style/pickiness observations
+into `optional_findings` on EVERY review — naming what reflects the code's
+style quality without being a real defect.
+
+**Contract**: Add a short section to `_SYSTEM_PROMPT` (after the grammar/caps
+section) directing: emit 1-3 `optional_findings` (style, naming, readability,
+idiom, consistency vs siblings) — be extra picky, anchor on a representative
+line, severity OBSERVATION, these never block the PR. Add a prompt-invariant
+test that the section name + the "optional_findings" field name are present.
 
 ### Success Criteria:
 
 #### Automated Verification:
 
-- `make test` passes (133 existing + 4 new prompt-invariant tests = 137).
+- `make test` passes; new tests cover: optional cap (3) enforced;
+  exit_code unaffected by optional; `O{n}` id injection in both surfaces;
+  prompt-invariant for the new section.
 - `make check` (ruff + mypy) passes.
-- The six existing prompt-invariant tests stay green (diff-scoping,
-  plan-tolerance, no-execution, cap reference, three lenses).
 
 #### Manual Verification:
 
-- Re-run the reviewer against the `rate_limiter` mock change (the 6 planted
-  defects) and confirm it now catches the bare `except Exception` in `stats()`
-  and the unbounded `_posts` dict — ideally 6/6, no severity inflation on the
-  4 it already caught (F1 CRITICAL, F2/F3 WARNING, F4 OBSERVATION).
-- No false-positive explosion: the count stays reasonable (the mock change
-  should not suddenly produce 15+ findings).
+- A live run shows the "Optional style observations" section populated (1-3
+  items) in the posted Markdown and the `optional_findings` key in stdout JSON.
+- Exit code is unchanged by the presence of optional findings.
 
-**Implementation Note**: This is a prompt-only edit with no behavior change
-to the graph/nodes/tools — the only "code" is the f-string and its tests. The
-manual re-run is the real proof; pause for it before archiving.
+---
+
+## Phase 3: recall tuning + stable validation (all 6 defects)
+
+### Overview
+
+Iterate on the prompt until the reviewer catches all 6 planted mock defects
+(main findings) across 2 consecutive runs, with optional findings rendering.
+Prompt-only; no schema change.
+
+### Changes Required:
+
+#### 1. Prompt recall iteration
+
+**File**: `reviewer-target-o-meter/src/reviewer_target_o_meter/agent/nodes.py`
+
+**Intent**: Close any remaining recall gap so all 6 defects are caught
+consistently. The Phase-1 softening targeted the right patterns; if the A/B
+still misses one, sharpen the lens wording (e.g. make the swallowing-`except`
+cue more explicit, or add a "scan every changed function for a bare/broad
+except" directive).
+
+**Contract**: Iterate on the safety/coverage lens text based on which of the
+6 defects the live run misses. Keep diff-scoping + severity calibration
+intact. Each prompt edit keeps the prompt-invariant tests green.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- `make test` passes; `make check` passes.
+
+#### Manual Verification:
+
+- 2 consecutive runs against `/tmp/mock-defect-review` both catch all 6
+  planted defects (hardcoded token, off-by-one, untested branches, duplicated
+  logic, bare `except Exception`, unbounded `_posts` dict).
+- Optional findings render (1-3) on both runs.
+- No severity inflation; no false-positive explosion (>~10 findings on the
+  mock would signal over-correction).
 
 ---
 
@@ -213,51 +241,67 @@ manual re-run is the real proof; pause for it before archiving.
 
 ### Unit Tests:
 
-- 4 new prompt-invariant tests (the suppressor is gone; the three pattern
-  classes are named; OBSERVATION-recall guidance is present). These are
-  offline string assertions on `_SYSTEM_PROMPT`.
+- **Phase 2**: optional cap (3) enforced at the schema; `exit_code` unaffected
+  by optional findings; `O{n}` id injection in stdout JSON + Markdown render;
+  prompt-invariant for the optional_findings section.
+- **Phase 1 (done)**: the 4 softening invariants.
 
 ### Manual Testing Steps:
 
-1. Re-create the `rate_limiter` mock change on a throwaway branch off master
-   (the 6 planted defects: hardcoded token, off-by-one, untested branches,
-   duplicated logic, bare `except Exception`, unbounded global dict).
-2. Run `PR_NUMBER=26 GITHUB_TOKEN=$(gh auth token)
-   GITHUB_REPOSITORY=krkruk/target-o-meter make run DIR=../` from the
-   `reviewer-target-o-meter/` package dir, logging to `/tmp/`.
-3. Compare the finding count + anchors vs the pre-fine-tune run
-   (`/tmp/mock_review_run2.log`: 4 findings, missed the `except` + the dict).
-4. Confirm 6/6 (or at minimum the 2 previously-missed), no severity inflation,
-   no false-positive explosion.
+1. Run `make run DIR=/tmp/mock-defect-review` (the 6-defect worktree) twice.
+2. Confirm both runs catch all 6 defects + render optional findings.
+3. Confirm exit code reflects only main findings.flagged.
 
 ## Performance Considerations
 
-- The prompt grows by ~3-4 lines (~150-200 chars). Negligible vs the existing
-  ~6k-char prompt; the cached-prompt discount amortizes it. No latency impact.
+- The prompt grows by ~8-12 lines across Phases 2-3. Negligible vs the existing
+  ~6.5k chars; cached-prompt discount amortizes it. No latency impact.
 
 ## References
 
-- Prompt source: `reviewer-target-o-meter/src/reviewer_target_o_meter/agent/nodes.py:48-143`
-  (the safety lens is `:103-110`).
-- Prompt-invariant tests:
-  `reviewer-target-o-meter/tests/test_nodes.py:29-86`.
-- Pre-fine-tune validation log: `/tmp/mock_review_run2.log` (4/6 findings).
-- Mock change (planted defects): the discarded `feat(rate-limit)` commit on
-  `fix/graph-recursion-issue` (recreate for the A/B).
-- Severity calibration is prompt-resident: AGENTS.md §c, §h.
+- Schema: `reviewer-target-o-meter/src/reviewer_target_o_meter/findings.py`
+- Prompt: `reviewer-target-o-meter/src/reviewer_target_o_meter/agent/nodes.py:48-150`
+- Renderers: `github.py` (Markdown), `cli.py:_emit_stdout` (JSON).
+- Mock change (6 defects): git commit `aefe369` (worktree at `/tmp/mock-defect-review`).
+- Pre-fine-tune A/B: `/tmp/mock_review_run2.log` (4/6).
+- First softening A/B: `/tmp/mock_review_run3.log` (0/6 — variance).
 
 ## Progress
 
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands.
 
-### Phase 1: softening the safety lens + recall-positive pattern enumeration
+### Phase 1: softening the safety lens (DONE)
 
 #### Automated
 
-- [x] 1.1 Extend the safety lens: add bare/swallowing-`except` + unbounded-state-accumulation to the pattern list; replace "Report only substantive issues" with recall-positive OBSERVATION guidance (suppress style noise only)
-- [x] 1.2 Add 4 prompt-invariant tests: substantive-gate removed, error-suppression named, unbounded-growth named, OBSERVATION-recall guidance present
-- [x] 1.3 `make test` passes (137); `make check` passes; the 6 existing prompt-invariant tests stay green
+- [x] 1.1 Extend the safety lens: add bare/swallowing-`except` + unbounded-state-accumulation to the pattern list; replace "Report only substantive issues" with recall-positive OBSERVATION guidance (suppress style noise only) — 5652b50
+- [x] 1.2 Add 4 prompt-invariant tests: substantive-gate removed, error-suppression named, unbounded-growth named, OBSERVATION-recall guidance present — 5652b50
+- [x] 1.3 `make test` passes (137); `make check` passes; the 6 existing prompt-invariant tests stay green — 5652b50
 
 #### Manual
 
-- [ ] 1.4 Re-run vs the `rate_limiter` mock change (6 planted defects); confirm the 2 previously-missed defects (bare `except Exception`, unbounded `_posts`) are now caught, no severity inflation, no false-positive explosion
+- [ ] 1.4 Re-run vs the `rate_limiter` mock change; rolled into Phase 3 (the 0/6 variance proved a single run isn't signal)
+
+### Phase 2: `optional_findings` schema + render + prompt wiring
+
+#### Automated
+
+- [x] 2.1 Add `optional_findings: list[Finding]` (cap 3) to `FindingsReport`; confirm `exit_code`/`flagged` iterate main `findings` only (isolation)
+- [x] 2.2 Thread `optional_findings` through the `report` node into the emitted report object
+- [x] 2.3 Render in both surfaces: Markdown "Optional style observations" section + stdout JSON key, with `O{n}` ids (separate counter from `F{n}`)
+- [x] 2.4 Add prompt section directing 1-3 style/pickiness observations into `optional_findings` every review + prompt-invariant test
+- [x] 2.5 `make test` passes; `make check` passes
+
+#### Manual
+
+- [ ] 2.6 Live run shows optional findings populated (1-3) in Markdown + JSON; exit code unchanged
+
+### Phase 3: recall tuning + stable validation (all 6 defects)
+
+#### Automated
+
+- [ ] 3.1 Iterate prompt recall (safety/coverage lens) until all 6 mock defects caught; keep invariants green
+
+#### Manual
+
+- [ ] 3.2 Two consecutive runs vs `/tmp/mock-defect-review` catch all 6 defects + render optional findings; no severity inflation / FP explosion

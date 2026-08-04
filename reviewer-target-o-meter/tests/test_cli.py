@@ -56,6 +56,31 @@ def test_cli_prints_valid_report_json_and_advisory_exit_one(
     assert payload["exit_code"] == 1
 
 
+def test_cli_emits_optional_findings_with_O_ids_in_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """stdout JSON carries optional_findings with O{n} ids (separate counter
+    from F{n}); they never affect exit_code."""
+    _set_env(monkeypatch)
+    report = FindingsReport(
+        findings=[Finding(
+            file="src/app.py", line=3, severity=Severity.CRITICAL, impact=Impact.HIGH,
+            dimension=Dimension.SECURITY, title="SQLi", detail="concat")],
+        optional_findings=[Finding(
+            file="src/app.py", line=1, severity=Severity.OBSERVATION, impact=Impact.LOW,
+            dimension=Dimension.MAINTAINABILITY, title="style note", detail="nit")],
+    )
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: report)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+    payload = json.loads(result.stdout)
+    assert "optional_findings" in payload
+    assert len(payload["optional_findings"]) == 1
+    assert payload["optional_findings"][0]["id"] == "O1"
+    # Exit driven only by main findings (the CRITICAL → exit 1); optional doesn't add.
+    assert payload["exit_code"] == 1
+
+
 def test_cli_exits_zero_when_nothing_flagged(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch)
     monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _clean_report())

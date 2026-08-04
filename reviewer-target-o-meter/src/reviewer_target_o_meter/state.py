@@ -33,6 +33,7 @@ class ReviewState(TypedDict, total=False):
     context_present: bool
     plan: str | None  # None-tolerant: plan-dependent checks are skipped when absent
     findings: Annotated[list[Finding], add]  # accumulates across nodes
+    optional_findings: Annotated[list[Finding], add]  # style bucket (cap 3 at schema)
     messages: Annotated[list, add]
     report: FindingsReport  # last-wins — the report node's validated output
 

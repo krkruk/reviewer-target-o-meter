@@ -148,6 +148,17 @@ a rationale in `detail`, and up to 2 `FixOption`s (a one-sentence fix DIRECTION,
 never an applied patch; if there are two, mark exactly one `recommended`).
 Emit at most {MAX_FINDINGS_PER_DIMENSION} findings per dimension; prioritize the
 highest-severity, highest-impact concern within each dimension before lower ones.
+
+## Optional style observations (optional_findings)
+
+ALSO emit 1-3 `optional_findings` — style, readability, naming, idiom, and
+consistency observations that reflect the code's quality but are NOT defects.
+Be extra picky: every review should produce something meaningful here. Anchor
+each on a representative changed line (same file/line grammar as a finding),
+set severity to OBSERVATION, and keep the detail to one sentence. These never
+block the PR (they never affect the exit code) — they are advisory style notes
+for the author. Do NOT duplicate a real defect from `findings` here; if a
+concern is a real defect, it belongs in `findings`, not `optional_findings`.
 """
 
 _SEVERITY_ORDER = {
@@ -361,7 +372,8 @@ def _extract_findings(result: Any) -> dict[str, Any]:
     ``create_agent(..., response_format=ProviderStrategy(...))`` surfaces the parsed
     object at the top-level ``structured_response`` key. We accept that, a bare
     FindingsReport/dict, or a messages payload, and defer strict validation to
-    ``report`` (the load-bearing host-side re-check).
+    ``report`` (the load-bearing host-side re-check). Carries both ``findings``
+    and ``optional_findings`` (the style-pickiness bucket).
     """
     parsed: Any = result
     if isinstance(result, dict):
@@ -373,17 +385,25 @@ def _extract_findings(result: Any) -> dict[str, Any]:
             msgs = result["messages"]
             last = msgs[-1] if msgs else None
             parsed = getattr(last, "parsed", None) or getattr(last, "content", None)
-    return {"findings": _coerce_finding_list(parsed)}
+    return {
+        "findings": _coerce_finding_list(parsed),
+        "optional_findings": _coerce_finding_list(parsed, key="optional_findings"),
+    }
 
 
-def _coerce_finding_list(parsed: Any) -> list[dict[str, Any]]:
-    """Return the list of finding dicts from a parsed payload, or []."""
+def _coerce_finding_list(parsed: Any, key: str = "findings") -> list[dict[str, Any]]:
+    """Return the list of finding dicts from a parsed payload, or [].
+
+    ``key`` selects which list to pull — ``findings`` (main) or
+    ``optional_findings`` (style bucket). Both hold Finding-shaped dicts.
+    """
     if parsed is None:
         return []
     if isinstance(parsed, FindingsReport):
-        return [f.model_dump() for f in parsed.findings]
-    if isinstance(parsed, dict) and isinstance(parsed.get("findings"), list):
-        return list(parsed["findings"])
+        src = parsed.optional_findings if key == "optional_findings" else parsed.findings
+        return [f.model_dump() for f in src]
+    if isinstance(parsed, dict) and isinstance(parsed.get(key), list):
+        return list(parsed[key])
     return []
 
 
@@ -394,9 +414,12 @@ def report(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
     dicts (research.md:114-118), so we MUST model_validate here before emit.
     """
     raw_findings = state.get("findings", [])
-    _log.info("node report — raw_findings=%d", len(raw_findings))
+    raw_optional = state.get("optional_findings", [])
+    _log.info("node report — raw_findings=%d raw_optional=%d", len(raw_findings), len(raw_optional))
     try:
-        report_obj = FindingsReport.model_validate({"findings": raw_findings})
+        report_obj = FindingsReport.model_validate(
+            {"findings": raw_findings, "optional_findings": raw_optional}
+        )
     except ValidationError:
         report_obj = FindingsReport(findings=[], summary="WARNING: report re-validation failed.")
 

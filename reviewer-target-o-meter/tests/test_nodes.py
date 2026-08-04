@@ -119,6 +119,14 @@ class TestSystemPromptInvariants:
         """
         assert "observation severity" in PROMPT_LOWER
 
+    def test_optional_findings_section_present(self) -> None:
+        """The prompt directs the model to emit 1-3 style/pickiness observations
+        into ``optional_findings`` on every review — naming the field and the
+        non-blocking intent so the model uses the bucket (not the main list).
+        """
+        assert "optional_findings" in PROMPT_LOWER
+        assert "style" in PROMPT_LOWER or "picky" in PROMPT_LOWER
+
 
 # --- usage telemetry probe (Phase 2, H-B) ---
 

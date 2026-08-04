@@ -83,6 +83,21 @@ def render_comment(report: FindingsReport, repo: str | None = None) -> str:
             lines.append("")
         lines.append("</details>")
 
+    # Optional style observations (O{n} ids — distinct from blocking F{n}).
+    # Advisory-on-advisory: these never affect exit_code / never block the PR.
+    if report.optional_findings:
+        lines.append("")
+        lines.append("<details><summary>Optional style observations (non-blocking)</summary>")
+        lines.append("")
+        lines.append("| ID | Dimension | File:Line | Title |")
+        lines.append("|---|---|---|---|")
+        for i, f in enumerate(report.optional_findings, start=1):
+            cell = _file_cell(f.file, f.line, repo)
+            lines.append(
+                f"| O{i} | {f.dimension.value} | {cell} | {_escape_pipe(f.title)} |"
+            )
+        lines.append("")
+
     # Advisory disclaimer (always present — FR-008).
     lines.append("")
     lines.append("---")
