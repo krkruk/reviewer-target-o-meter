@@ -47,14 +47,15 @@ def test_plan_discovery_is_none_tolerant() -> None:
 
 def test_report_revalidates_and_exits_advisory_on_flagged() -> None:
     out = report({"findings": [_finding("critical")]}, None)
-    assert out["exit_code"] == 1
-    assert isinstance(out["report"], FindingsReport)
-    assert len(out["findings"]) == 1
+    rpt = out["report"]
+    assert isinstance(rpt, FindingsReport)
+    assert rpt.exit_code == 1
+    assert len(rpt.findings) == 1
 
 
 def test_report_exits_zero_on_all_observations() -> None:
     out = report({"findings": [_finding("observation")]}, None)
-    assert out["exit_code"] == 0
+    assert out["report"].exit_code == 0
 
 
 def test_report_degrades_on_invalid_findings() -> None:
@@ -62,8 +63,9 @@ def test_report_degrades_on_invalid_findings() -> None:
     bad = [{"file": "/abs/x.py", "line": 1, "severity": "critical",
             "impact": "high", "dimension": "security", "title": "t", "detail": "d"}]
     out = report({"findings": bad}, None)
-    assert out["exit_code"] == 0
-    assert out["findings"] == []
+    rpt = out["report"]
+    assert rpt.exit_code == 0
+    assert rpt.findings == []
 
 
 def test_report_caps_per_dimension() -> None:
@@ -87,9 +89,9 @@ def test_report_caps_per_dimension() -> None:
     findings += [_dim_finding("correctness", i) for i in range(1, 4)]  # 3 → unchanged
 
     out = report({"findings": findings}, None)
-    result = out["findings"]
+    result = out["report"].findings
 
-    dims = [f["dimension"] for f in result]
+    dims = [f.dimension.value for f in result]
     assert dims.count("security") == MAX_FINDINGS_PER_DIMENSION  # 7 capped to 5
     assert dims.count("correctness") == 3                         # under cap, unchanged
 
@@ -100,7 +102,7 @@ def test_report_caps_per_dimension() -> None:
 
     # Severity sort is preserved within each dimension (all critical here → the
     # line tiebreak must be ascending within the dimension's kept slice).
-    sec_lines = [f["line"] for f in result if f["dimension"] == "security"]
+    sec_lines = [f.line for f in result if f.dimension.value == "security"]
     assert sec_lines == sorted(sec_lines)
     # The cap keeps the FIRST 5 by severity order (lines 1..5); 6,7 are dropped.
     assert sec_lines == [1, 2, 3, 4, 5]
@@ -168,6 +170,130 @@ def test_end_to_end_mocked_llm_emits_report(monkeypatch: pytest.MonkeyPatch) -> 
     assert report_obj.exit_code == 1  # the injected CRITICAL finding flags
 
 
+def test_findings_are_not_duplicated_across_report_node(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single finding from the model must not be doubled by the report node.
+
+    Regression guard for the duplicate-findings bug: ``ReviewState.findings`` uses
+    the LangGraph ``add`` reducer (accumulates across nodes), and the ``report``
+    node re-emitted ``findings`` — so the reducer appended the validated finding
+    onto the one ``checks`` already added, doubling every finding (live: 1 model
+    finding → F1 and F2 identical). The report node must emit its result under a
+    key that survives the merge WITHOUT going through the ``add`` reducer.
+    """
+    import asyncio
+
+    import reviewer_target_o_meter.graph as graph_mod
+    from reviewer_target_o_meter.findings import Dimension, Finding, Impact, Severity
+
+    payload = FindingsReport(findings=[Finding(
+        file=".gitignore", line=20, severity=Severity.OBSERVATION, impact=Impact.LOW,
+        dimension=Dimension.MAINTAINABILITY, title="node-modules entry",
+        detail="typo for node_modules")])
+    fake_agent = _FakeAgent(payload)
+    real_build_graph = graph_mod.build_graph
+    monkeypatch.setattr(
+        graph_mod, "build_graph", lambda cfg: real_build_graph(cfg, agent=fake_agent)
+    )
+
+    inputs = {"repo_path": "/repo", "diff": "diff", "context": None, "plan": None, "findings": []}
+    report_obj = asyncio.run(graph_mod.arun_review(_cfg(), inputs))
+    assert isinstance(report_obj, FindingsReport)
+    # ONE finding in → ONE finding out (the bug doubled it to 2).
+    assert len(report_obj.findings) == 1
+    # And the content is the single finding, not two copies.
+    titles = [f.title for f in report_obj.findings]
+    assert titles == ["node-modules entry"]
+
+
+# --- checks-node error boundary (H-A): any model-call failure degrades ---
+
+
+class _RaisingAgent:
+    """Offline stand-in whose ``ainvoke`` raises — mirrors the live crash.
+
+    The real stacktrace is a ``TypeError: 'NoneType' object is not iterable`` from
+    the OpenAI SDK parser when the model returns ``choices: None`` (see plan.md).
+    ``langchain_openai._agenerate`` attaches the raw HTTP response to the exception
+    as ``.response`` before re-raising, so we model that too: the response-shape
+    probe in the ``checks`` boundary must read ``getattr(exc, "response", ...)``.
+    """
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+        self.invoked_with: list = []
+
+    async def ainvoke(self, messages_input, *_a, **_kw) -> dict[str, Any]:
+        self.invoked_with.append(messages_input)
+        raise self._exc
+
+
+def test_checks_node_degrades_on_model_typeerror() -> None:
+    """The load-bearing crash repro: a ``TypeError`` out of ``agent.ainvoke`` must
+    degrade ``checks`` to ``{"findings": []}`` — not escape the node.
+
+    This is the real-faithful test the ``_BoomGraph`` outer-boundary fake left open:
+    it drives the REAL ``checks`` node (not a stub graph) through the DI seam with a
+    fake agent that raises the exact exception from the live stacktrace. Removing
+    the try/except makes this test red.
+    """
+    import asyncio
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+
+    exc = TypeError("'NoneType' object is not iterable")
+    # Model the langchain_openai behavior: raw HTTP response attached to the exc.
+    exc.response = {"choices": None, "usage": None}  # type: ignore[attr-defined]
+    checks = build_checks_node(_cfg(), agent=_RaisingAgent(exc))
+
+    state = {"diff": "diff", "plan": None, "context": None, "findings": []}
+    out = asyncio.run(checks(state, None))
+    assert out == {"findings": []}
+
+
+def test_checks_node_degrades_on_generic_exception() -> None:
+    """The boundary is broad: any ``Exception`` degrades, not just ``TypeError``.
+
+    OQ#1: "any model-call failure degrades" (AGENTS.md §d). A non-TypeError
+    exception (e.g. an ``APIError``) must also yield empty findings.
+    """
+    import asyncio
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+
+    checks = build_checks_node(_cfg(), agent=_RaisingAgent(RuntimeError("upstream 5xx")))
+    state = {"diff": "diff", "plan": None, "context": None, "findings": []}
+    out = asyncio.run(checks(state, None))
+    assert out == {"findings": []}
+
+
+def test_full_graph_degrades_to_empty_report_on_model_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: a raising agent must yield an empty ``FindingsReport`` with
+    ``exit_code == 0`` — never a pipeline crash.
+
+    Mirrors ``test_end_to_end_mocked_llm_emits_report``'s monkeypatch of
+    ``build_graph``, but the agent raises instead of returning a payload. Proves the
+    failure mode that crashed the pipeline now degrades through to the advisory
+    empty report.
+    """
+    import asyncio
+
+    import reviewer_target_o_meter.graph as graph_mod
+
+    fake_agent = _RaisingAgent(TypeError("'NoneType' object is not iterable"))
+    real_build_graph = graph_mod.build_graph
+    monkeypatch.setattr(
+        graph_mod, "build_graph", lambda cfg: real_build_graph(cfg, agent=fake_agent)
+    )
+
+    inputs = {"repo_path": "/repo", "diff": "diff", "context": None, "plan": None, "findings": []}
+    report_obj = asyncio.run(graph_mod.arun_review(_cfg(), inputs))
+    assert isinstance(report_obj, FindingsReport)
+    assert report_obj.findings == []
+    assert report_obj.exit_code == 0
+
+
 # --- recursion-probe / fail-safe ---
 
 
@@ -193,4 +319,32 @@ def test_graph_recursion_error_emits_partial_report(monkeypatch: pytest.MonkeyPa
     assert isinstance(report_obj, FindingsReport)
     assert report_obj.findings == []
     assert report_obj.summary is not None and "recursion" in report_obj.summary.lower()
+    assert report_obj.exit_code == 0  # advisory — never crashes the pipeline
+
+
+def test_graph_node_timeout_emits_empty_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A NodeTimeoutError from the TimeoutPolicy must degrade, not crash (OQ#1).
+
+    Discovered live during Phase 2 (max_tokens raise → reasoning model reasons
+    past the 120s run_timeout). LangGraph raises ``NodeTimeoutError`` from the
+    TimeoutPolicy enforcement OUTSIDE the checks node body, so the in-node
+    Phase-1 error boundary can't catch it — and ``arun_review`` caught only
+    ``GraphRecursionError``, so the pipeline crashed. A timeout IS a model-call
+    failure; OQ#1 ("any model-call failure degrades / never crash the pipeline")
+    covers it. Mirrors the recursion fail-safe pattern.
+    """
+    from langgraph.errors import NodeTimeoutError
+
+    import reviewer_target_o_meter.graph as graph_mod
+
+    class _SlowBoomGraph:
+        async def ainvoke(self, *_a, **_kw):
+            raise NodeTimeoutError("checks", 120.001, kind="run", run_timeout=120.0)
+
+    monkeypatch.setattr(graph_mod, "build_graph", lambda c: _SlowBoomGraph())
+    inputs = {"repo_path": "/repo", "diff": "d", "context": None, "plan": None, "findings": []}
+    report_obj = graph_mod.run_review(_cfg(), inputs)
+    assert isinstance(report_obj, FindingsReport)
+    assert report_obj.findings == []
+    assert report_obj.summary is not None and "timeout" in report_obj.summary.lower()
     assert report_obj.exit_code == 0  # advisory — never crashes the pipeline

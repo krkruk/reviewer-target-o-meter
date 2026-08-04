@@ -5,10 +5,10 @@ Follows the existing degrade convention: on any git failure, write a one-line
 ``WARNING: ...`` to stderr and return an empty string — a diff-based review can
 still run on context alone (FR-010 graceful-degradation spirit).
 
-The diff cap (~20k chars) matches the tool-output cap in ``AGENTS.md`` §b; it
-bounds the ``checks`` node's prompt size. Truncation is always at a clean
-``\\ndiff --git`` boundary with a visible marker, so the model is never silently
-fed a truncation.
+The diff cap bounds the ``checks`` node's prompt size so the reasoning model's
+input + reasoning + emitted JSON all fit within the token budget. Truncation is
+always at a clean ``\\ndiff --git`` boundary with a visible marker, so the model
+is never silently fed a truncation.
 """
 
 from __future__ import annotations
@@ -30,8 +30,10 @@ from ._util import warn as _warn
 
 _log = get_logger(__name__)
 
-# Module constant (NOT env-driven in v1). Matches the tool-output cap in AGENTS.md §b.
-MAX_DIFF_CHARS = 20_000
+# Module constant (NOT env-driven in v1). Sized so the diff + context + plan +
+# reasoning + JSON all fit the model's token budget (raised alongside _MAX_TOKENS
+# in provider.py). The boundary-based _cap may overshoot up to the next file edge.
+MAX_DIFF_CHARS = 45_000
 
 # Heuristic base candidates tried in order when no override/CI var is set.
 _BASE_CANDIDATES = ("origin/main", "main", "origin/master", "master")

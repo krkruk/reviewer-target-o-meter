@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from langgraph.errors import GraphRecursionError
+from langgraph.errors import GraphRecursionError, NodeTimeoutError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, TimeoutPolicy
 from pydantic import ValidationError
@@ -74,6 +74,21 @@ async def arun_review(config: Config, inputs: dict[str, Any]) -> FindingsReport:
         return FindingsReport(
             findings=[],
             summary="WARNING: recursion limit reached; emitted partial/empty report.",
+        )
+    except NodeTimeoutError as exc:
+        # A timeout IS a model-call failure (OQ#1: any model-call failure degrades,
+        # never crash the pipeline). The TimeoutPolicy raises this OUTSIDE the
+        # checks node body, so the in-node Phase-1 error boundary can't catch it —
+        # surfaced live when the raised max_tokens let the reasoning model reason
+        # past the run_timeout. Degrade to the advisory empty report (exit 0).
+        _log.warning(
+            "graph degraded — node %r exceeded run timeout (%s); emitted empty report. "
+            "If this repeats, switch to a faster/paid model or raise run_timeout.",
+            getattr(exc, "node", "checks"), exc,
+        )
+        return FindingsReport(
+            findings=[],
+            summary="WARNING: checks node run timeout exceeded; emitted empty report.",
         )
 
     return _report_from_result(result, inputs)

@@ -17,7 +17,7 @@ def test_config_defaults_for_model_and_base_url(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
     cfg = Config.from_env()
     assert cfg.api_key == "sk-test"
-    assert cfg.model == "nvidia/nemotron-3-super-120b-a12b:free"
+    assert cfg.model == "deepseek/deepseek-v4-flash-0731"
     assert cfg.base_url == "https://openrouter.ai/api/v1"
 
 
