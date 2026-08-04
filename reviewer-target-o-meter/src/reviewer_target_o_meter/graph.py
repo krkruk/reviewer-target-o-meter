@@ -16,10 +16,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, TimeoutPolicy
 from pydantic import ValidationError
 
+from ._util import get_logger
 from .agent.nodes import build_checks_node, context_load, plan_discovery, report
 from .config import Config
 from .findings import FindingsReport
 from .state import ReviewState
+
+_log = get_logger(__name__)
 
 
 def build_graph(config: Config, agent: Any = None):
@@ -63,9 +66,11 @@ async def arun_review(config: Config, inputs: dict[str, Any]) -> FindingsReport:
     """Async entry: build + ainvoke the graph (checks node needs async for timeout)."""
     compiled = build_graph(config)
     invoke_config = {"recursion_limit": config.recursion_limit}
+    _log.info("graph start — recursion_limit=%d", config.recursion_limit)
     try:
         result = await compiled.ainvoke(inputs, invoke_config)
     except GraphRecursionError:
+        _log.info("graph degraded — recursion limit reached; partial/empty report")
         return FindingsReport(
             findings=[],
             summary="WARNING: recursion limit reached; emitted partial/empty report.",

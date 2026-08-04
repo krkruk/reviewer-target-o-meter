@@ -21,11 +21,14 @@ from langchain.agents.structured_output import ProviderStrategy
 from langchain.messages import HumanMessage
 from pydantic import ValidationError
 
+from .._util import get_logger
 from ..config import Config
 from ..findings import Finding, FindingsReport, Severity
 from ..provider import build_llm
 from ..state import ReviewState
 from .tools import structural_search, text_search
+
+_log = get_logger(__name__)
 
 # Per-dimension findings cap (F-02). Defined ABOVE _SYSTEM_PROMPT because 3.2
 # splices it into the prompt string (evaluated at import time). Enforced BOTH
@@ -150,6 +153,7 @@ def context_load(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
 
     Does NOT walk the checkout to load AGENTS.md/skills/source (that is F-02).
     """
+    _log.info("node context_load — context_present=%s", state.get("context") is not None)
     return {"context_present": state.get("context") is not None}
 
 
@@ -158,6 +162,7 @@ def plan_discovery(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
 
     No diff-relative discovery (that is F-02).
     """
+    _log.info("node plan_discovery — plan_present=%s", state.get("plan") is not None)
     return {"plan": state.get("plan")}  # may be None — agent skips plan-dependent checks
 
 
@@ -199,7 +204,12 @@ def build_checks_node(config: Config, agent: Any = None):
         ]
         # ainvoke (async) so the node's TimeoutPolicy(run_timeout) can be enforced —
         # sync Python execution cannot be safely cancelled in-process.
+        _log.info(
+            "node checks — agent invoke start (diff_chars=%d plan_present=%s context_present=%s)",
+            len(diff or ""), plan is not None, context is not None,
+        )
         result = await agent.ainvoke({"messages": messages})
+        _log.info("node checks — agent invoke end")
         return _extract_findings(result)
 
     return checks
@@ -244,6 +254,7 @@ def report(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
     dicts (research.md:114-118), so we MUST model_validate here before emit.
     """
     raw_findings = state.get("findings", [])
+    _log.info("node report — raw_findings=%d", len(raw_findings))
     try:
         report_obj = FindingsReport.model_validate({"findings": raw_findings})
     except ValidationError:

@@ -23,7 +23,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ._util import get_logger
 from ._util import warn as _warn
+
+_log = get_logger(__name__)
 
 # Module constant (NOT env-driven in v1). Bounds the checks-node prompt.
 MAX_CONTEXT_CHARS = 8_000
@@ -67,9 +70,16 @@ def load_context(repo_path: str | Path) -> str | None:
                 _append_file(chunks, change_dir / name)
 
     if not chunks:
+        _log.info("context loaded — chunks=0 (nothing loaded)")
         return None
 
-    return _cap(_SEPARATOR.join(chunks))
+    joined = _SEPARATOR.join(chunks)
+    capped = _cap(joined)
+    _log.info(
+        "context loaded — chunks=%d chars=%d truncated=%s",
+        len(chunks), len(capped), len(joined) != len(capped),
+    )
+    return capped
 
 
 def _append_file(chunks: list[str], path: Path) -> None:

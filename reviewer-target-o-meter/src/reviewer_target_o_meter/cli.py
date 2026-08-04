@@ -18,7 +18,7 @@ from pathlib import Path
 
 import typer
 
-from ._util import configure_logging
+from ._util import configure_logging, get_logger
 from ._util import warn as _warn
 from .config import Config
 from .context_loader import load_context
@@ -46,27 +46,52 @@ def review(
     # breadcrumbs surface under typer's CliRunner capture in tests and stream to
     # the GHA step log in PROD. Idempotent across invokes.
     configure_logging(config.log_level)
+    log = get_logger(__name__)
+
+    mode = "post" if config.post_to_github else "stdout"
+    log.info(
+        "review start — mode=%s model=%s base_ref=%s repo=%s",
+        mode, config.model, config.base_ref, config.github_repository,
+    )
 
     # Compute the diff once and feed it to both plan discovery and the graph —
     # don't diff twice. load_plan is None-tolerant (no plan discoverable → the
     # prompt's plan-tolerance kicks in; FR-006).
     diff = compute_diff(repo_path, base_ref=config.base_ref)
+    # The truncation flag is the in-module diff breadcrumb's job (it sees the
+    # raw vs capped length); here we only echo the resolved base + final size.
+    log.info("diff computed — base=%s chars=%d", config.base_ref, len(diff))
+    context = load_context(repo_path)
+    log.info("context loaded — present=%s", context is not None)
+    plan = load_plan(repo_path, diff)
+    log.info("plan discovered — present=%s chars=%d", plan is not None, len(plan or ""))
     inputs: dict[str, object] = {
         "repo_path": str(repo_path),
         "diff": diff,
-        "context": load_context(repo_path),
-        "plan": load_plan(repo_path, diff),
+        "context": context,
+        "plan": plan,
         "findings": [],
     }
     report = run_review(config, inputs)
+    log.info(
+        "review complete — findings=%d flagged=%d exit_code=%d",
+        len(report.findings), len(report.flagged), report.exit_code,
+    )
+
+    # Markdown preview: the exact render_comment() payload that is (or would be)
+    # posted, echoed to stderr once before the post-vs-stdout branch. It is NOT a
+    # log line (so LOG_LEVEL never suppresses it) and carries no per-line level
+    # prefix (clean, copy-pasteable Markdown). A pure, cheap extra render.
+    typer.echo(render_comment(report, repo=config.github_repository), err=True)
 
     if config.post_to_github:
         # mypy can't narrow Optional fields through the post_to_github property;
         # both are guaranteed non-None here — narrow explicitly so the typed
         # post_comment call passes `uv run mypy src`.
         assert config.pr_number is not None and config.github_token is not None
+        owner, _, repo_name = (config.github_repository or "").partition("/")
+        log.info("post attempt — %s#%d", config.github_repository, config.pr_number)
         try:
-            owner, _, repo_name = (config.github_repository or "").partition("/")
             post_comment(
                 owner=owner, repo=repo_name, pr_number=config.pr_number,
                 token=config.github_token, api_url=config.github_api_url,
@@ -78,8 +103,10 @@ def review(
             # if a future transport/log change puts it in the exception text
             # (AGENTS.md §d: key read at runtime only, never echoed).
             _warn(f"posting failed; falling back to stdout ({type(exc).__name__})")
+            log.info("post failed — degraded to stdout (%s)", type(exc).__name__)
             _emit_stdout(report)
             sys.exit(report.exit_code)
+        log.info("post success — comment posted to %s#%d", config.github_repository, config.pr_number)
         sys.exit(report.exit_code)  # advisory, even after a successful post
 
     _emit_stdout(report)

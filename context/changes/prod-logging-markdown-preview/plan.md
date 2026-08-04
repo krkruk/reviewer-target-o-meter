@@ -516,10 +516,10 @@ trace, which is the intended outcome.
 
 #### Automated
 
-- [ ] 1.1 `make check` passes (ruff + mypy src)
-- [ ] 1.2 `make test` green: new `tests/test_logging.py` passes + existing suite unchanged
-- [ ] 1.3 `configure_logging` idempotent (single handler after repeated calls)
-- [ ] 1.4 `warn()` output contains the literal `WARNING` token
+- [x] 1.1 `make check` passes (ruff + mypy src) — 0b527fd
+- [x] 1.2 `make test` green: new `tests/test_logging.py` passes + existing suite unchanged — 0b527fd
+- [x] 1.3 `configure_logging` idempotent (single handler after repeated calls) — 0b527fd
+- [x] 1.4 `warn()` output contains the literal `WARNING` token — 0b527fd
 
 #### Manual
 

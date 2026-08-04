@@ -25,7 +25,10 @@ from git.exc import (
 )
 from gitdb.exc import BadName, BadObject
 
+from ._util import get_logger
 from ._util import warn as _warn
+
+_log = get_logger(__name__)
 
 # Module constant (NOT env-driven in v1). Matches the tool-output cap in AGENTS.md §b.
 MAX_DIFF_CHARS = 20_000
@@ -61,7 +64,12 @@ def compute_diff(repo_path: str | Path, base_ref: str | None = None) -> str:
         _warn(f"diff skipped — git diff failed ({exc})")
         return ""
 
-    return _cap(raw)
+    capped = _cap(raw)
+    _log.info(
+        "diff computed — base=%s raw_chars=%d capped_chars=%d truncated=%s",
+        base, len(raw), len(capped), len(raw) != len(capped),
+    )
+    return capped
 
 
 def _resolve_base(repo: Repo, override: str | None) -> str | None:

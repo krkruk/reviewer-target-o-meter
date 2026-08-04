@@ -28,7 +28,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ._util import get_logger
 from ._util import warn as _warn
+
+_log = get_logger(__name__)
 
 # Module constant (NOT env-driven). The plan is the single highest-signal input,
 # so it earns a generous share of the context budget alongside the ~20k-char
@@ -109,13 +112,23 @@ def _discover_change_id(repo_path: Path, diff: str) -> str | None:
     """
     touched = _changed_change_ids(diff)
     if len(touched) == 1:
-        return _validate_change_id(touched.pop())
+        found = _validate_change_id(touched.pop())
+        _log.info("plan discovered — change_id=%s (diff-driven)", found)
+        return found
     if len(touched) > 1:
+        _log.info(
+            "plan discovered — none (ambiguous diff: %d change docs touched)", len(touched)
+        )
         return None  # ambiguous diff → fall through / give up (plan-tolerance)
 
     active = _active_change_ids(repo_path)
     if len(active) == 1:
-        return _validate_change_id(active[0])
+        found = _validate_change_id(active[0])
+        _log.info("plan discovered — change_id=%s (single-active)", found)
+        return found
+    _log.info(
+        "plan discovered — none (%d active change dirs; want exactly 1)", len(active)
+    )
     return None  # 0 or >1 active → no plan (plan-tolerance)
 
 

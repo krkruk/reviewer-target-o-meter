@@ -158,3 +158,83 @@ def test_cli_stdout_only_when_no_pr_env(monkeypatch: pytest.MonkeyPatch) -> None
     assert posted == [], "no post attempt without PR env"
     payload = json.loads(result.stdout)
     assert payload["findings"][0]["id"] == "F1"
+
+
+# --- Phase 2: INFO breadcrumbs + the Markdown preview --------------------------
+
+
+def test_cli_emits_info_breadcrumbs_to_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Representative INFO breadcrumbs appear in result.output (the stderr trace)."""
+    _set_env(monkeypatch)
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _flagged_report())
+    monkeypatch.setattr(cli_mod, "compute_diff", lambda *a, **k: "diff")
+    monkeypatch.setattr(cli_mod, "load_context", lambda *a, **k: None)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+
+    assert result.exit_code == 1, result.output
+    # Breadcrumbs are metadata-only step markers; the exact phrasing is prompt-
+    # resident but these tokens are the contract the smoke + GHA run lean on.
+    assert "review start" in result.output.lower()
+    assert "diff computed" in result.output.lower()
+    assert "review complete" in result.output.lower()
+
+
+def test_cli_emits_markdown_preview_to_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The render_comment() Markdown is echoed to stderr before the post-vs-stdout branch."""
+    _set_env(monkeypatch)
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _flagged_report())
+    monkeypatch.setattr(cli_mod, "compute_diff", lambda *a, **k: "diff")
+    monkeypatch.setattr(cli_mod, "load_context", lambda *a, **k: None)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+
+    assert result.exit_code == 1, result.output
+    # The preview is the exact render_comment() payload: header + finding title.
+    assert "# reviewer-target-o-meter" in result.output
+    assert "SQLi" in result.output  # the fixture finding's title
+
+
+def test_cli_stdout_stays_pure_json_with_trace_on_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """stdout is uncontaminated by the stderr trace + preview across the CLI cases."""
+    _set_env(monkeypatch)
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _flagged_report())
+    monkeypatch.setattr(cli_mod, "compute_diff", lambda *a, **k: "diff")
+    monkeypatch.setattr(cli_mod, "load_context", lambda *a, **k: None)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+
+    assert result.exit_code == 1, result.output
+    # stdout parses as JSON and carries the report — never the trace or preview.
+    payload = json.loads(result.stdout)
+    assert payload["findings"][0]["id"] == "F1"
+    assert "# reviewer-target-o-meter" not in result.stdout
+    assert "review start" not in result.stdout.lower()
+
+
+def test_cli_log_lines_are_metadata_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No input body text (diff/context/plan/report) appears in the log lines.
+
+    Metadata-only invariant (AGENTS.md §e): logs carry sizes/counts/refs, never
+    the diff/context/plan/report bodies. The report body is shown once via the
+    dedicated Markdown preview, intentionally.
+    """
+    _set_env(monkeypatch)
+    secret_diff_body = "SUPER_SECRET_DIFF_CONTENT_XYZ"
+    secret_context_body = "SUPER_SECRET_CONTEXT_BODY_ZZZ"
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _flagged_report())
+    monkeypatch.setattr(cli_mod, "compute_diff", lambda *a, **k: secret_diff_body)
+    monkeypatch.setattr(cli_mod, "load_context", lambda *a, **k: secret_context_body)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+
+    assert result.exit_code == 1, result.output
+    # The log lines (everything before the Markdown preview header) must not
+    # carry the diff/context bodies. The preview header marks where the
+    # intended report-body echo begins.
+    preview_idx = result.output.find("# reviewer-target-o-meter")
+    log_region = result.output[:preview_idx] if preview_idx != -1 else result.output
+    assert secret_diff_body not in log_region
+    assert secret_context_body not in log_region

@@ -210,7 +210,7 @@ def test_unreadable_plan_file_degrades_to_none(
 
 
 def test_non_utf8_plan_does_not_raise(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # A plan.md carrying invalid UTF-8 (e.g. a binary blob, a Windows-1252 doc).
     # UnicodeDecodeError is a ValueError, NOT an OSError — a plain `except
@@ -219,20 +219,19 @@ def test_non_utf8_plan_does_not_raise(
     plan_path = tmp_path / "context/changes/feature-x/plan.md"
     plan_path.parent.mkdir(parents=True, exist_ok=True)
     plan_path.write_bytes(b"# Plan\nbefore \xff\xfe bad bytes\nafter\n")
-    capfd.readouterr()
 
-    plan = load_plan(tmp_path, _diff("feature-x"))
+    with caplog.at_level("INFO", logger="reviewer_target_o_meter"):
+        plan = load_plan(tmp_path, _diff("feature-x"))
 
     # Lenient decode → the plan still loads (no WARNING, no raise); the
     # replacement chars just appear where the bad bytes were.
     assert plan is not None
     assert "# Plan" in plan
-    captured = capfd.readouterr()
-    assert not (captured.err or captured.out)  # no WARNING — this is normal
+    assert "WARNING" not in caplog.text  # lenient decode is normal, not a degrade
 
 
 def test_oversize_binary_plan_does_not_oom(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # A multi-GB-shaped plan.md: well over the cap but written as bytes so we
     # don't materialize the full string in the test either. read_text() would
@@ -243,15 +242,14 @@ def test_oversize_binary_plan_does_not_oom(
     plan_path.parent.mkdir(parents=True, exist_ok=True)
     overage = MAX_PLAN_CHARS + 50_000
     plan_path.write_bytes(b"P" * overage)
-    capfd.readouterr()
 
-    plan = load_plan(tmp_path, _diff("feature-x"))
+    with caplog.at_level("INFO", logger="reviewer_target_o_meter"):
+        plan = load_plan(tmp_path, _diff("feature-x"))
 
     assert plan is not None
     assert len(plan) <= MAX_PLAN_CHARS + 200  # cap + marker overhead only
     assert "truncated" in plan.lower()
-    captured = capfd.readouterr()
-    assert not (captured.err or captured.out)  # truncation is silent, not a warning
+    assert "WARNING" not in caplog.text  # truncation is silent, not a warning
 
 
 # --- (F3) a crafted change-id can't traverse out of context/changes/ ---------
