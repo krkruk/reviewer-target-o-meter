@@ -1,7 +1,7 @@
 ---
 change_id: prod-logging-markdown-preview
 title: PROD INFO logging and Markdown preview before exit
-status: implementing
+status: implemented
 created: 2026-08-04
 updated: 2026-08-04
 archived_at: null

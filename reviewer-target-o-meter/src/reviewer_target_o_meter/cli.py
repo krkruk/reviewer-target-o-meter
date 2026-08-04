@@ -58,9 +58,10 @@ def review(
     # don't diff twice. load_plan is None-tolerant (no plan discoverable → the
     # prompt's plan-tolerance kicks in; FR-006).
     diff = compute_diff(repo_path, base_ref=config.base_ref)
-    # The resolved base + final size are CLI-level metadata the in-module diff
-    # breadcrumb (raw vs capped length, truncation flag) doesn't carry.
-    log.info("diff computed — base=%s chars=%d", config.base_ref, len(diff))
+    # The configured base (may differ from the resolved base the in-module
+    # diff breadcrumb reports when the override is None and the heuristic chain
+    # picks origin/main). Final size is CLI-level; truncation is in-module.
+    log.info("diff computed — configured_base=%s chars=%d", config.base_ref, len(diff))
     context = load_context(repo_path)
     plan = load_plan(repo_path, diff)
     # The richer context/plan breadcrumbs (chunk count, change-id-or-reason) are

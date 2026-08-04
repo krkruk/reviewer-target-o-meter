@@ -559,4 +559,4 @@ trace, which is the intended outcome.
 
 #### Manual
 
-- [ ] 4.4 Push to `./target-o-meter` → `review` workflow fires; GHA step log shows the full INFO step trace AND the Markdown preview; comment posts as before; run exits green even when findings flagged (record PR + run id)
+- [x] 4.4 Push to `./target-o-meter` → `review` workflow fires; GHA step log shows the full INFO step trace AND the Markdown preview; comment posts as before; run exits green even when findings flagged — PR krkruk/target-o-meter#25, run 30909064748 (success); trace + `# reviewer-target-o-meter` preview + `post success` all present in the step log
