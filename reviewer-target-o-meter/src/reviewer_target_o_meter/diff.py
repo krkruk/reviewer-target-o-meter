@@ -33,7 +33,7 @@ _log = get_logger(__name__)
 # Module constant (NOT env-driven in v1). Sized so the diff + context + plan +
 # reasoning + JSON all fit the model's token budget (raised alongside _MAX_TOKENS
 # in provider.py). The boundary-based _cap may overshoot up to the next file edge.
-MAX_DIFF_CHARS = 45_000
+MAX_DIFF_CHARS = 100000
 
 # Heuristic base candidates tried in order when no override/CI var is set.
 _BASE_CANDIDATES = ("origin/main", "main", "origin/master", "master")

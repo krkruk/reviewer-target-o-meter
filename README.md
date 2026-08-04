@@ -115,7 +115,7 @@ contract and gives a stable signal on large diffs. Override `MODEL` to swap it
 prompt is large but amortized across agent steps via OpenRouter's cached-prompt
 discount; the cost/latency bounds (`recursion_limit=40`, `max_iterations=12`,
 `run_timeout=120s`) hold. The diff input is capped at `MAX_DIFF_CHARS=45000`
-and the model's completion budget at `_MAX_TOKENS=60000` (reasoning + emitted
+and the model's completion budget at `_MAX_TOKENS=128000` (reasoning + emitted
 JSON both fit).
 
 ## Environment variables
