@@ -64,7 +64,13 @@ never traced the flow. Drive BOTH halves:
 
 1. **Read the changed files first.** Before any tool call, read each diff hunk
    and form the change's core flow (what's wired to what, what's new, what
-   shifted). Every finding anchors on a file/line the diff touches.
+   shifted). Every finding anchors on a file/line the diff touches. A diff hunk
+   shows only the changed lines — when a hunk MODIFIES a function, use
+   `text_search` to read the WHOLE function (not just the hunk) before judging
+   it: the hunk's new branch may duplicate or contradict a sequence elsewhere
+   in the same function that the hunk doesn't show. Reviewing only the hunk is
+   the #1 cause of missed cross-branch duplication and contradicting-comment
+   defects.
 
 2. **Then deepen with tools — actively, on the changed files' context.** The
    search tools exist to make findings SPECIFIC and CORRECT, not merely to
@@ -102,12 +108,25 @@ Think in three lenses, then map each finding to the 7-dimension enum at emit.
 
 - **Safety, quality & pattern compliance**: over the changed source files, look
   for security (injection, hardcoded secrets, missing authn/authz at boundaries),
-  performance (N+1, unbounded iteration, missing pagination), reliability
-  (missing error handling at external boundaries, races, leaks), data-safety
-  (destructive ops without rollback, migrations without a path), and substantive
-  pattern mismatches vs 1-2 sibling files (use a tool to read a sibling). Scale
-  pattern depth to change size (≤3 files → minimal pattern effort). Report only
-  substantive issues.
+  performance (N+1, unbounded iteration, missing pagination, unbounded state
+  accumulation — a collection, especially module-level or process-global, that
+  grows without bound over the process lifetime with no eviction), reliability
+  (missing error handling at external boundaries, AND present-but-hostile
+  handling: a bare or broad except that swallows the error and returns a
+  default, hiding failures from the caller/operator; races; leaks),
+  maintainability (duplicated control flow — when two or more branches in the
+  SAME changed function repeat the same cleanup/degrade/exit sequence
+  verbatim, that duplication will drift; flag it so it gets factored into one
+  helper. To spot this you MUST read the WHOLE changed function with
+  text_search, not just the diff hunk — a new branch often duplicates a
+  sequence that sits elsewhere in the same function, outside the hunk), data-safety (destructive ops without rollback, migrations without a
+  path), and substantive pattern mismatches vs 1-2 sibling files (use a tool to
+  read a sibling). Scale pattern depth to change size (≤3 files → minimal
+  pattern effort). Flag the reliability/performance/maintainability patterns
+  above even when minor — emit them at OBSERVATION severity when they don't
+  cause a real correctness/security defect; reserve CRITICAL/WARNING for
+  genuine defects. Still suppress trivial style/formatting noise (naming,
+  whitespace, import order) — this is a critical-point reviewer, not a linter.
 
 - **Test coverage**: the plan declares what "tested" means. Match each
   test-related Automated Verification commitment to a test file in the diff;
@@ -126,6 +145,20 @@ Pick the single best-fitting `dimension` per finding:
 - documentation findings when a plan/doc commitment is missed.
 A finding may legitimately fit two dimensions — pick the best fit.
 
+## Cross-branch duplication (scan EVERY changed function for this)
+
+A frequent, high-value maintainability defect: two or more branches in the SAME
+changed function repeat the same multi-line sequence verbatim (a degrade path
+like `_warn(...) + _emit_stdout(report) + sys.exit(...)`, or a cleanup/rollback
+sequence, or the same validation block). Such duplication WILL drift the next
+time one branch is edited. The diff you receive uses function-context, so BOTH
+branches are visible even when only one was changed — actively compare the
+branches of each changed function and flag any repeated multi-line sequence as
+a maintainability finding (OBSERVATION unless it already caused a bug), with a
+fix direction to factor the shared sequence into one helper. If you see the
+same 2+ line sequence appear more than once in a changed function, that is the
+signal — do not skip it.
+
 ## Severity, impact, verdict
 
 - severity (critical/warning/observation) says how bad if ignored.
@@ -140,6 +173,17 @@ a rationale in `detail`, and up to 2 `FixOption`s (a one-sentence fix DIRECTION,
 never an applied patch; if there are two, mark exactly one `recommended`).
 Emit at most {MAX_FINDINGS_PER_DIMENSION} findings per dimension; prioritize the
 highest-severity, highest-impact concern within each dimension before lower ones.
+
+## Optional style observations (optional_findings)
+
+ALSO emit 1-3 `optional_findings` — style, readability, naming, idiom, and
+consistency observations that reflect the code's quality but are NOT defects.
+Be extra picky: every review should produce something meaningful here. Anchor
+each on a representative changed line (same file/line grammar as a finding),
+set severity to OBSERVATION, and keep the detail to one sentence. These never
+block the PR (they never affect the exit code) — they are advisory style notes
+for the author. Do NOT duplicate a real defect from `findings` here; if a
+concern is a real defect, it belongs in `findings`, not `optional_findings`.
 """
 
 _SEVERITY_ORDER = {
@@ -353,7 +397,8 @@ def _extract_findings(result: Any) -> dict[str, Any]:
     ``create_agent(..., response_format=ProviderStrategy(...))`` surfaces the parsed
     object at the top-level ``structured_response`` key. We accept that, a bare
     FindingsReport/dict, or a messages payload, and defer strict validation to
-    ``report`` (the load-bearing host-side re-check).
+    ``report`` (the load-bearing host-side re-check). Carries both ``findings``
+    and ``optional_findings`` (the style-pickiness bucket).
     """
     parsed: Any = result
     if isinstance(result, dict):
@@ -365,17 +410,25 @@ def _extract_findings(result: Any) -> dict[str, Any]:
             msgs = result["messages"]
             last = msgs[-1] if msgs else None
             parsed = getattr(last, "parsed", None) or getattr(last, "content", None)
-    return {"findings": _coerce_finding_list(parsed)}
+    return {
+        "findings": _coerce_finding_list(parsed),
+        "optional_findings": _coerce_finding_list(parsed, key="optional_findings"),
+    }
 
 
-def _coerce_finding_list(parsed: Any) -> list[dict[str, Any]]:
-    """Return the list of finding dicts from a parsed payload, or []."""
+def _coerce_finding_list(parsed: Any, key: str = "findings") -> list[dict[str, Any]]:
+    """Return the list of finding dicts from a parsed payload, or [].
+
+    ``key`` selects which list to pull — ``findings`` (main) or
+    ``optional_findings`` (style bucket). Both hold Finding-shaped dicts.
+    """
     if parsed is None:
         return []
     if isinstance(parsed, FindingsReport):
-        return [f.model_dump() for f in parsed.findings]
-    if isinstance(parsed, dict) and isinstance(parsed.get("findings"), list):
-        return list(parsed["findings"])
+        src = parsed.optional_findings if key == "optional_findings" else parsed.findings
+        return [f.model_dump() for f in src]
+    if isinstance(parsed, dict) and isinstance(parsed.get(key), list):
+        return list(parsed[key])
     return []
 
 
@@ -386,9 +439,12 @@ def report(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
     dicts (research.md:114-118), so we MUST model_validate here before emit.
     """
     raw_findings = state.get("findings", [])
-    _log.info("node report — raw_findings=%d", len(raw_findings))
+    raw_optional = state.get("optional_findings", [])
+    _log.info("node report — raw_findings=%d raw_optional=%d", len(raw_findings), len(raw_optional))
     try:
-        report_obj = FindingsReport.model_validate({"findings": raw_findings})
+        report_obj = FindingsReport.model_validate(
+            {"findings": raw_findings, "optional_findings": raw_optional}
+        )
     except ValidationError:
         report_obj = FindingsReport(findings=[], summary="WARNING: report re-validation failed.")
 

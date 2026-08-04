@@ -107,9 +107,16 @@ class Finding(BaseModel):
 
 
 class FindingsReport(BaseModel):
-    """The validated output. Signal + exit code are host-side, hidden from the model."""
+    """The validated output. Signal + exit code are host-side, hidden from the model.
+
+    ``optional_findings`` is a second, capped (3) style-pickiness bucket: the model
+    emits 1-3 observations on style/readability/idiom there on every review. They
+    are advisory-on-advisory — they NEVER affect ``exit_code``/``flagged`` (those
+    iterate ``findings`` only), so they never block a PR.
+    """
 
     findings: list[Finding] = Field(default_factory=list)
+    optional_findings: list[Finding] = Field(default_factory=list, max_length=3)
     summary: str | None = None
     overall_verdict: str | None = None
 
@@ -119,5 +126,8 @@ class FindingsReport(BaseModel):
 
     @property
     def exit_code(self) -> int:
-        """FR-008 advisory: 0 if nothing flagged, else 1. Never blocks a merge."""
+        """FR-008 advisory: 0 if nothing flagged, else 1. Never blocks a merge.
+
+        Driven ONLY by main ``findings`` — ``optional_findings`` never flips it.
+        """
         return 1 if self.flagged else 0

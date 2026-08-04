@@ -95,6 +95,34 @@ def test_render_comment_file_cell_uses_backticks_even_when_repo_known() -> None:
     assert "https://github.com/" not in md
 
 
+def test_render_comment_optional_findings_section_uses_O_ids() -> None:
+    """Optional style observations render in a distinct section with ``O{n}``
+    ids (separate counter from ``F{n}``), so they're never confused with the
+    blocking findings table.
+    """
+    report = FindingsReport(
+        findings=[Finding(
+            file="src/app.py", line=3, severity=Severity.CRITICAL, impact=Impact.HIGH,
+            dimension=Dimension.SECURITY, title="SQLi", detail="concat")],
+        optional_findings=[Finding(
+            file="src/app.py", line=1, severity=Severity.OBSERVATION, impact=Impact.LOW,
+            dimension=Dimension.MAINTAINABILITY, title="long function", detail="split it")],
+    )
+    md = render_comment(report)
+    # Main finding keeps F1; optional gets O1 (not F2).
+    assert "F1" in md
+    assert "O1" in md
+    assert "F2" not in md
+    # The optional section is labeled distinctly.
+    assert "optional" in md.lower() or "style" in md.lower()
+
+
+def test_render_comment_omits_optional_section_when_empty() -> None:
+    """No optional findings → no optional section in the Markdown."""
+    md = render_comment(FindingsReport(findings=[]))
+    assert "O1" not in md
+
+
 # --- post_comment: offline via MockTransport ----------------------------------
 
 

@@ -192,6 +192,71 @@ def test_oversize_diff_is_truncated_with_marker(tmp_path: Path) -> None:
     assert "truncated" in diff.lower()
 
 
+# --- (c) function-context: show the whole enclosing function (cross-branch dedup) ---
+
+
+def test_diff_includes_unchanged_sibling_branch_via_function_context(tmp_path: Path) -> None:
+    """The diff uses ``--function-context`` so each hunk shows its whole enclosing
+    function — not just the changed lines plus 3 lines of context.
+
+    Why this matters: a new branch often duplicates a sequence (e.g. a degrade
+    ``_warn`` + ``_emit_stdout`` + ``sys.exit``) that sits in ANOTHER branch of
+    the same function, far enough away that the default 3-line context window
+    doesn't reach it. With plain ``git diff`` the model sees only the new branch
+    and misses the duplication; with function-context the unchanged sibling
+    branch is visible too, so cross-branch duplication becomes literally visible.
+
+    Setup: a function with two branches separated by enough padding that the
+    default 3-line context window cannot bridge them. The commit edits only one
+    branch; the other branch's marker must still appear in the diff.
+    """
+    # Build a base branch that ALREADY contains the function, then advance HEAD
+    # past main with an edit to ONE branch — so the reviewed diff is a real
+    # MODIFICATION hunk (not a new file) and the sibling branch sits outside it.
+    repo = git.Repo.init(tmp_path)
+    repo.git.symbolic_ref("HEAD", "refs/heads/main")
+    _configure_identity(repo)
+    (tmp_path / "README.md").write_text("hello\n")
+    repo.index.add(["README.md"])
+    repo.index.commit("base commit")
+    padding = "    # padding line to push branches apart\n" * 8
+    base_src = (
+        "def handle(flag):\n"
+        "    if flag:\n"
+        "        log('a')\n"
+        "        cleanup()\n"
+        + padding +
+        "    else:\n"
+        "        log('b')\n"
+        "        cleanup()\n"
+    )
+    (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "src" / "app.py").write_text(base_src)
+    repo.index.add(["src/app.py"])
+    fn_commit = repo.index.commit("main: function with two far-apart branches")  # advances main
+
+    # Detach HEAD onto the function commit so the next edit commit advances HEAD
+    # PAST main (compute_diff diffs main..HEAD).
+    repo.git.checkout(fn_commit.hexsha)
+
+    # Now edit ONE branch on top; the sibling branch sits outside the minimal hunk.
+    edited = base_src.replace("        log('a')\n", "        log('a')\n        extra()\n")
+    (tmp_path / "src" / "app.py").write_text(edited)
+    repo.index.add(["src/app.py"])
+    repo.index.commit("reviewed: edit one branch only")
+
+    diff = compute_diff(tmp_path)
+
+    assert "diff --git" in diff
+    # The unchanged 'else' branch's marker must be visible (function-context),
+    # even though the 8 padding lines put it well outside the default context
+    # window. This is the line that lets the reviewer see cross-branch duplication.
+    assert "log('b')" in diff, (
+        "function-context must surface the unchanged sibling branch even when "
+        "it sits far outside the default 3-line context window"
+    )
+
+
 # --- (d) the degrade path: non-git dir never raises ----------------------------
 
 

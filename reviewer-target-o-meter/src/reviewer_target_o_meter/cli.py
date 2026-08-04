@@ -115,11 +115,15 @@ def review(
 
 
 def _emit_stdout(report) -> None:
-    """Serialize the report as JSON to stdout; inject F{n} ids during emit."""
+    """Serialize the report as JSON to stdout; inject F{n}/O{n} ids during emit."""
     payload = report.model_dump(mode="json")
     findings = payload.get("findings", [])
     for i, _finding in enumerate(findings, start=1):
         _finding["id"] = f"F{i}"
+    # Optional style observations get a separate O{n} counter (distinct from F{n}).
+    optional = payload.get("optional_findings", [])
+    for i, _finding in enumerate(optional, start=1):
+        _finding["id"] = f"O{i}"
     payload["exit_code"] = report.exit_code
     typer.echo(json.dumps(payload, indent=2, default=str))
 

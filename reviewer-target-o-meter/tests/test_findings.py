@@ -129,15 +129,65 @@ def test_flagged_lists_only_critical_and_warning() -> None:
     assert [f.title for f in report.flagged] == ["warn"]
 
 
+# --- optional_findings: style-pickiness bucket (cap 3, exit-code-isolated) ---
+
+
+def test_optional_findings_defaults_empty() -> None:
+    """A report with no optional findings is valid (the field defaults to [])."""
+    report = FindingsReport()
+    assert report.optional_findings == []
+
+
+def test_optional_findings_cap_enforced_at_three() -> None:
+    """The style bucket is capped at 3 — a 4th must be rejected by the schema."""
+    with pytest.raises(ValidationError):
+        FindingsReport(optional_findings=[
+            _valid_finding(title=f"style {i}") for i in range(4)
+        ])
+
+
+def test_optional_findings_reuses_finding_schema() -> None:
+    """optional_findings entries are full Finding objects (anchor + validators)."""
+    report = FindingsReport(optional_findings=[_valid_finding()])
+    assert len(report.optional_findings) == 1
+    assert isinstance(report.optional_findings[0], Finding)
+
+
+def test_optional_findings_never_affect_exit_code() -> None:
+    """A CRITICAL/WARNING in optional_findings does NOT flip exit_code — optional
+    is advisory-on-advisory and never blocks the PR. Exit is driven ONLY by the
+    main findings.flagged.
+    """
+    report = FindingsReport(
+        findings=[_valid_finding(severity=Severity.OBSERVATION)],
+        optional_findings=[_valid_finding(severity=Severity.CRITICAL)],
+    )
+    assert report.exit_code == 0  # main findings have no flagged → exit 0
+    assert report.optional_findings[0].severity == Severity.CRITICAL  # but it's there
+
+
+def test_optional_findings_absent_from_flagged() -> None:
+    """flagged iterates main findings only — optional never leaks into it."""
+    report = FindingsReport(
+        optional_findings=[_valid_finding(severity=Severity.CRITICAL, title="opt")],
+    )
+    assert report.flagged == []
+
+
 # --- is_flagged must be absent from the JSON schema the model sees ---
 
 
 def test_is_flagged_absent_from_json_schema() -> None:
+    """The host-side signal properties (is_flagged/exit_code/flagged) must not
+    appear as schema FIELDS the model can populate. Checked against the
+    schema's ``properties`` keys (not the whole repr, which includes the model
+    docstring — where the words may legitimately appear in prose).
+    """
     schema = FindingsReport.model_json_schema()
-    blob = repr(schema)
-    assert "is_flagged" not in blob
-    assert "exit_code" not in blob
-    assert "flagged" not in blob
+    props = set(schema.get("properties", {}).keys())
+    assert "is_flagged" not in props
+    assert "exit_code" not in props
+    assert "flagged" not in props
 
 
 # --- enums carry the impl-review dimensions and verdict fields ---

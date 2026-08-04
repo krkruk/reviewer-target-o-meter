@@ -61,7 +61,14 @@ def compute_diff(repo_path: str | Path, base_ref: str | None = None) -> str:
         return ""
 
     try:
-        raw = repo.git.diff(base, "HEAD", "--patch", "--no-color")
+        # --function-context (-W): show each hunk's WHOLE enclosing function, not
+        # just the changed lines + 3 context lines. A new branch often duplicates
+        # a sequence (e.g. a degrade _warn + _emit_stdout + sys.exit) that sits
+        # in ANOTHER branch of the same function, outside the minimal hunk.
+        # Without -W the model never sees the sibling branch and misses the
+        # cross-branch duplication (the #1 cause of missed maintainability
+        # defects). The boundary-based _cap still bounds the total size.
+        raw = repo.git.diff(base, "HEAD", "--patch", "--no-color", "--function-context")
     except (GitCommandError, BadName, BadObject) as exc:
         _warn(f"diff skipped — git diff failed ({exc})")
         return ""

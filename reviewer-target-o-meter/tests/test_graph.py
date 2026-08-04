@@ -108,6 +108,24 @@ def test_report_caps_per_dimension() -> None:
     assert sec_lines == [1, 2, 3, 4, 5]
 
 
+def test_report_carries_optional_findings_through() -> None:
+    """The report node threads ``optional_findings`` from state into the emitted
+    report object (the style-pickiness bucket). They are NOT sorted/capped per-
+    dimension (their own schema cap of 3 applies); they pass through unchanged.
+    """
+    opt = [{
+        "file": "src/app.py", "line": 1, "severity": "observation",
+        "impact": "low", "dimension": "maintainability",
+        "title": "style: long function", "detail": "could be split",
+    }]
+    out = report({"findings": [], "optional_findings": opt}, None)
+    rpt = out["report"]
+    assert len(rpt.optional_findings) == 1
+    assert rpt.optional_findings[0].title == "style: long function"
+    # Optional never affects exit — empty main findings → exit 0.
+    assert rpt.exit_code == 0
+
+
 # --- graph wiring / node ordering ---
 
 
