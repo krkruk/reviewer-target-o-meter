@@ -85,6 +85,40 @@ class TestSystemPromptInvariants:
         assert "safety" in PROMPT_LOWER
         assert "test coverage" in PROMPT_LOWER
 
+    def test_substantive_gate_removed(self) -> None:
+        """The recall-suppressing "Report only substantive issues" gate is gone.
+
+        A validation run missed a swallowed ``except Exception`` and an unbounded
+        global dict — both real reliability smells the model self-suppressed under
+        this gate. The phrase must stay out of the prompt so a future edit can't
+        silently re-introduce it. Whitespace-collapsed so a line-wrap can't hide it.
+        """
+        import re
+        collapsed = re.sub(r"\s+", " ", PROMPT_LOWER)
+        assert "report only substantive issues" not in collapsed
+
+    def test_error_suppression_pattern_named(self) -> None:
+        """The safety lens names present-but-hostile error handling: a bare or
+        broad ``except`` that swallows the error and returns a default (hiding
+        failures). Covers the ``stats()`` defect class the validation missed.
+        """
+        assert "swallow" in PROMPT_LOWER or "bare" in PROMPT_LOWER
+        assert "except" in PROMPT_LOWER
+
+    def test_unbounded_growth_pattern_named(self) -> None:
+        """The safety lens names unbounded state accumulation: a collection
+        (especially module-level / process-global) that grows without bound over
+        the process lifetime with no eviction. Covers the ``_posts`` defect class.
+        """
+        assert "unbounded" in PROMPT_LOWER
+
+    def test_observation_severity_recall_guidance_present(self) -> None:
+        """The prompt directs the model to emit minor-but-real smells at
+        OBSERVATION severity, so recall-positive guidance doesn't inflate
+        CRITICAL/WARNING. Replaces the old "substantive" self-suppression gate.
+        """
+        assert "observation severity" in PROMPT_LOWER
+
 
 # --- usage telemetry probe (Phase 2, H-B) ---
 

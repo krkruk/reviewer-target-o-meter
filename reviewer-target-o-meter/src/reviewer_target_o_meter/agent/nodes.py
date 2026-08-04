@@ -102,12 +102,20 @@ Think in three lenses, then map each finding to the 7-dimension enum at emit.
 
 - **Safety, quality & pattern compliance**: over the changed source files, look
   for security (injection, hardcoded secrets, missing authn/authz at boundaries),
-  performance (N+1, unbounded iteration, missing pagination), reliability
-  (missing error handling at external boundaries, races, leaks), data-safety
+  performance (N+1, unbounded iteration, missing pagination, unbounded state
+  accumulation — a collection, especially module-level or process-global, that
+  grows without bound over the process lifetime with no eviction), reliability
+  (missing error handling at external boundaries, AND present-but-hostile
+  handling: a bare or broad except that swallows the error and returns a
+  default, hiding failures from the caller/operator; races; leaks), data-safety
   (destructive ops without rollback, migrations without a path), and substantive
   pattern mismatches vs 1-2 sibling files (use a tool to read a sibling). Scale
-  pattern depth to change size (≤3 files → minimal pattern effort). Report only
-  substantive issues.
+  pattern depth to change size (≤3 files → minimal pattern effort). Flag the
+  reliability/performance patterns above even when minor — emit them at
+  OBSERVATION severity when they don't cause a real correctness/security defect;
+  reserve CRITICAL/WARNING for genuine defects. Still suppress trivial
+  style/formatting noise (naming, whitespace, import order) — this is a
+  critical-point reviewer, not a linter.
 
 - **Test coverage**: the plan declares what "tested" means. Match each
   test-related Automated Verification commitment to a test file in the diff;
