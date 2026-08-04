@@ -1,10 +1,10 @@
 ---
 change_id: fine-tune-reviewer-system-prompts
 title: Fine-tune reviewer system prompt for higher recall (more findings, tolerate false positives)
-status: planned
+status: archived
 created: 2026-08-04
 updated: 2026-08-04
-archived_at: null
+archived_at: 2026-08-04T18:36:45Z
 ---
 
 ## Notes
