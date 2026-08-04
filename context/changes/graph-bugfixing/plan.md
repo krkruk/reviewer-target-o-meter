@@ -350,13 +350,13 @@ for the model-switch decision.
 
 #### Automated
 
-- [ ] 1.1 Add try/except Exception around `agent.ainvoke` in `checks` + best-effort response-shape probe from `exc.response`; degrade to `{"findings": []}` with a WARNING carrying the "switch model" hint
-- [ ] 1.2 Add real-faithful degrade test via DI seam (fake agent raising `TypeError` mirroring the crash) + a generic-`Exception` case; assert empty findings + exit_code 0
-- [ ] 1.3 `make test` passes; `make check` (ruff + mypy) passes
+- [x] 1.1 Add try/except Exception around `agent.ainvoke` in `checks` + best-effort response-shape probe from `exc.response`; degrade to `{"findings": []}` with a WARNING carrying the "switch model" hint
+- [x] 1.2 Add real-faithful degrade test via DI seam (fake agent raising `TypeError` mirroring the crash) + a generic-`Exception` case; assert empty findings + exit_code 0
+- [x] 1.3 `make test` passes; `make check` (ruff + mypy) passes
 
 #### Manual
 
-- [ ] 1.4 `make run DIR=../../target-o-meter/` on the crashing diff no longer raises; logs `WARNING: node checks — agent invoke failed: ...`; exits 0 with empty/partial report
+- [x] 1.4 `make run DIR=../../target-o-meter/` on the crashing diff no longer raises; logs `WARNING: node checks — agent invoke failed: ...`; exits 0 with empty/partial report — VERIFIED live vs PR #26 (krkruk/target-o-meter): the exact TypeError reproduced and degraded (`response_shape=choices=None finish_reason=None usage=None`, exit_code=0, comment posted)
 
 ### Phase 2: max_tokens headroom (H-B) + token/usage telemetry
 

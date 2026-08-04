@@ -208,11 +208,62 @@ def build_checks_node(config: Config, agent: Any = None):
             "node checks — agent invoke start (diff_chars=%d plan_present=%s context_present=%s)",
             len(diff or ""), plan is not None, context is not None,
         )
-        result = await agent.ainvoke({"messages": messages})
+        try:
+            result = await agent.ainvoke({"messages": messages})
+        except Exception as exc:  # noqa: BLE001 — OQ#1: ANY model-call failure degrades (AGENTS.md §d).
+            # The live crash was an uncaught TypeError from the OpenAI SDK parser
+            # (choices=None) escaping here and crashing the pipeline — bypassing
+            # every downstream fail-safe. Broad on purpose: only BaseException
+            # (KeyboardInterrupt/CancelledError) keeps propagating.
+            shape = _extract_response_shape(exc)
+            _log.warning(
+                "node checks — agent invoke failed: %s: %s | response_shape=%s — "
+                "degraded to empty report; if this repeats, switch to a more potent "
+                "model with a larger token budget",
+                type(exc).__name__, exc, shape,
+            )
+            return {"findings": []}
         _log.info("node checks — agent invoke end")
         return _extract_findings(result)
 
     return checks
+
+
+def _extract_response_shape(exc: BaseException) -> str:
+    """Best-effort probe of the raw response attached to a model-call exception.
+
+    ``langchain_openai._agenerate`` attaches the raw HTTP response (``.response``)
+    to the exception before re-raising. The live crash (a ``TypeError`` from the
+    SDK parser when ``choices`` is ``None``) carries the response shape here — so
+    we surface it in the degrade WARNING for free, without a live re-run.
+
+    Never raises: the probe itself is wrapped so a malformed ``.response`` never
+    re-throws out of the except block. Reads only structural keys
+    (``choices``/``finish_reason``/``usage``); headers / bodies are NOT touched, so
+    no API key or absolute host path can leak into the log.
+    """
+    raw = getattr(exc, "response", None)
+    if raw is None:
+        return "n/a"
+    try:
+        # ``raw`` may be an httpx Response (call ``.json()``) or an already-parsed
+        # dict (the test fixture path). Accept both; tolerate anything else.
+        body = raw.json() if hasattr(raw, "json") and callable(raw.json) else raw
+        if isinstance(body, dict):
+            choices = body.get("choices")
+            finish_reason = None
+            if isinstance(choices, list) and choices:
+                first = choices[0]
+                finish_reason = first.get("finish_reason") if isinstance(first, dict) else None
+            usage = body.get("usage")
+            n_choices = len(choices) if isinstance(choices, list) else None
+            return (
+                f"choices={'None' if choices is None else n_choices} "
+                f"finish_reason={finish_reason!r} usage={usage!r}"
+            )
+        return f"{type(raw).__name__}"
+    except Exception:  # noqa: BLE001 — probe must never re-raise out of the except block
+        return f"{type(raw).__name__}(unreadable)"
 
 
 def _extract_findings(result: Any) -> dict[str, Any]:

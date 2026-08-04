@@ -168,6 +168,95 @@ def test_end_to_end_mocked_llm_emits_report(monkeypatch: pytest.MonkeyPatch) -> 
     assert report_obj.exit_code == 1  # the injected CRITICAL finding flags
 
 
+# --- checks-node error boundary (H-A): any model-call failure degrades ---
+
+
+class _RaisingAgent:
+    """Offline stand-in whose ``ainvoke`` raises — mirrors the live crash.
+
+    The real stacktrace is a ``TypeError: 'NoneType' object is not iterable`` from
+    the OpenAI SDK parser when the model returns ``choices: None`` (see plan.md).
+    ``langchain_openai._agenerate`` attaches the raw HTTP response to the exception
+    as ``.response`` before re-raising, so we model that too: the response-shape
+    probe in the ``checks`` boundary must read ``getattr(exc, "response", ...)``.
+    """
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+        self.invoked_with: list = []
+
+    async def ainvoke(self, messages_input, *_a, **_kw) -> dict[str, Any]:
+        self.invoked_with.append(messages_input)
+        raise self._exc
+
+
+def test_checks_node_degrades_on_model_typeerror() -> None:
+    """The load-bearing crash repro: a ``TypeError`` out of ``agent.ainvoke`` must
+    degrade ``checks`` to ``{"findings": []}`` — not escape the node.
+
+    This is the real-faithful test the ``_BoomGraph`` outer-boundary fake left open:
+    it drives the REAL ``checks`` node (not a stub graph) through the DI seam with a
+    fake agent that raises the exact exception from the live stacktrace. Removing
+    the try/except makes this test red.
+    """
+    import asyncio
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+
+    exc = TypeError("'NoneType' object is not iterable")
+    # Model the langchain_openai behavior: raw HTTP response attached to the exc.
+    exc.response = {"choices": None, "usage": None}  # type: ignore[attr-defined]
+    checks = build_checks_node(_cfg(), agent=_RaisingAgent(exc))
+
+    state = {"diff": "diff", "plan": None, "context": None, "findings": []}
+    out = asyncio.run(checks(state, None))
+    assert out == {"findings": []}
+
+
+def test_checks_node_degrades_on_generic_exception() -> None:
+    """The boundary is broad: any ``Exception`` degrades, not just ``TypeError``.
+
+    OQ#1: "any model-call failure degrades" (AGENTS.md §d). A non-TypeError
+    exception (e.g. an ``APIError``) must also yield empty findings.
+    """
+    import asyncio
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+
+    checks = build_checks_node(_cfg(), agent=_RaisingAgent(RuntimeError("upstream 5xx")))
+    state = {"diff": "diff", "plan": None, "context": None, "findings": []}
+    out = asyncio.run(checks(state, None))
+    assert out == {"findings": []}
+
+
+def test_full_graph_degrades_to_empty_report_on_model_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: a raising agent must yield an empty ``FindingsReport`` with
+    ``exit_code == 0`` — never a pipeline crash.
+
+    Mirrors ``test_end_to_end_mocked_llm_emits_report``'s monkeypatch of
+    ``build_graph``, but the agent raises instead of returning a payload. Proves the
+    failure mode that crashed the pipeline now degrades through to the advisory
+    empty report.
+    """
+    import asyncio
+
+    import reviewer_target_o_meter.graph as graph_mod
+
+    fake_agent = _RaisingAgent(TypeError("'NoneType' object is not iterable"))
+    real_build_graph = graph_mod.build_graph
+    monkeypatch.setattr(
+        graph_mod, "build_graph", lambda cfg: real_build_graph(cfg, agent=fake_agent)
+    )
+
+    inputs = {"repo_path": "/repo", "diff": "diff", "context": None, "plan": None, "findings": []}
+    report_obj = asyncio.run(graph_mod.arun_review(_cfg(), inputs))
+    assert isinstance(report_obj, FindingsReport)
+    assert report_obj.findings == []
+    assert report_obj.exit_code == 0
+
+
 # --- recursion-probe / fail-safe ---
 
 
