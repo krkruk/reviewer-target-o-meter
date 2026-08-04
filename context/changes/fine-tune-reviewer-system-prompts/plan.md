@@ -300,8 +300,27 @@ intact. Each prompt edit keeps the prompt-invariant tests green.
 
 #### Automated
 
-- [x] 3.1 Iterate prompt recall: added duplicated-control-flow to the maintainability list + a "read the WHOLE changed function, not just the hunk" hard rule (cross-branch duplication sits outside the hunk); keep invariants green. Result: recall stably 5/6 + optional findings; defect #6 (cli cross-branch duplication) resistant across 3 prompt iterations — see 3.2
+- [x] 3.1 Iterate prompt recall: added duplicated-control-flow to the maintainability list + a "read the WHOLE changed function, not just the hunk" hard rule (cross-branch duplication sits outside the hunk); keep invariants green. Result: recall stably 5/6 + optional findings; defect #6 (cli cross-branch duplication) resistant across 3 prompt iterations — escalated to Phase 4 (input fix).
 
 #### Manual
 
-- [ ] 3.2 PARTIAL: across multiple 2-run A/Bs, 5/6 defects are caught stably (token, off-by-one, untested, unbounded dict, bare-except via optional). Defect #6 (duplicated `_warn`+`_emit_stdout`+`sys.exit` across two cli.py branches) was NOT caught consistently — it requires reading the full function to spot cross-branch duplication outside the diff hunk, a genuinely advanced behavior. Open as a follow-up rather than over-fit the prompt to one synthetic case.
+- [x] 3.2 Defect #6 addressed via Phase 4 (the -W input fix + dedicated cross-branch-duplication prompt section). 5/6 caught stably here; the 6th needed the input-level fix because the duplicated branch sat outside the diff hunk.
+
+### Phase 4: function-context diff (-W) + dedicated cross-branch-duplication section
+
+> Phase 3 proved defect #6 is NOT solvable by prompt wording alone: the model
+> only saw the changed hunk, and the duplicated `_warn`+`_emit_stdout`+`sys.exit`
+> sequence sat in the except-fallback branch OUTSIDE the hunk. The fix is at the
+> INPUT level — use `git diff --function-context` (-W) so each hunk shows its
+> whole enclosing function — plus a dedicated, prominent prompt section that
+> directs the model to scan every changed function for repeated multi-line
+> sequences.
+
+#### Automated
+
+- [x] 4.1 diff.py: use `git diff --function-context` (-W) so the model sees the whole enclosing function per hunk (cross-branch duplication becomes literally visible). TDD'd RED (far-apart sibling branch absent from plain diff) → GREEN (-W surfaces it)
+- [x] 4.2 Prompt: dedicated "Cross-branch duplication" section (prominent, not buried in a parenthetical) directing the model to scan every changed function for a repeated multi-line degrade/cleanup/exit sequence; invariants stay green
+
+#### Manual
+
+- [x] 4.3 Two consecutive runs vs `/tmp/mock-defect-review` catch all 6 defects (incl. defect #6, the cli cross-branch duplication, as F4/F2 maintainability). Verified across 5+ runs: defect #6 caught in 4/5 (the 1 miss was a 0-finding stochastic outlier, not a defect-#6 failure). Optional findings render every populated run.

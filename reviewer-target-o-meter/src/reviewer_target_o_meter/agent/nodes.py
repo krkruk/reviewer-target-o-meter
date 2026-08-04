@@ -145,6 +145,20 @@ Pick the single best-fitting `dimension` per finding:
 - documentation findings when a plan/doc commitment is missed.
 A finding may legitimately fit two dimensions — pick the best fit.
 
+## Cross-branch duplication (scan EVERY changed function for this)
+
+A frequent, high-value maintainability defect: two or more branches in the SAME
+changed function repeat the same multi-line sequence verbatim (a degrade path
+like `_warn(...) + _emit_stdout(report) + sys.exit(...)`, or a cleanup/rollback
+sequence, or the same validation block). Such duplication WILL drift the next
+time one branch is edited. The diff you receive uses function-context, so BOTH
+branches are visible even when only one was changed — actively compare the
+branches of each changed function and flag any repeated multi-line sequence as
+a maintainability finding (OBSERVATION unless it already caused a bug), with a
+fix direction to factor the shared sequence into one helper. If you see the
+same 2+ line sequence appear more than once in a changed function, that is the
+signal — do not skip it.
+
 ## Severity, impact, verdict
 
 - severity (critical/warning/observation) says how bad if ignored.
