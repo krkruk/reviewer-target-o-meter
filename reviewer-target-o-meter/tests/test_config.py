@@ -32,9 +32,12 @@ def test_config_env_overrides_model_and_base_url(monkeypatch: pytest.MonkeyPatch
 
 def test_config_cost_latency_knob_constants() -> None:
     # OQ#2 mechanism + the ~5-min wall-clock NFR — central, single-source knobs.
+    # run_timeout/max_iterations/max_tool_calls final values per fine-tune-context
+    # diagnosis (see context/changes/fine-tune-context/diagnosis.md).
     assert Config.recursion_limit == 40
-    assert Config.max_iterations == 12
-    assert Config.run_timeout == 120
+    assert Config.max_iterations == 16
+    assert Config.max_tool_calls == 18
+    assert Config.run_timeout == 300
 
 
 def test_config_attribution_headers_present(monkeypatch: pytest.MonkeyPatch) -> None:

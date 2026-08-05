@@ -20,19 +20,22 @@ from .findings import FindingsReport
 # max_tokens so reasoning + JSON both fit and the JSON doesn't truncate mid-generation
 # (research.md:316-319). 8192/16384 proved too tight for the nemotron reasoning model
 # on a large diff — it exhausted the budget before emitting JSON, returning `choices: None`
-# (the live crash; see graph-bugfixing plan). Raised to 60000 so the reasoning model
+# (the live crash; see graph-bugfixing plan). Raised to 128000 so the reasoning model
 # has ample room to reason AND emit the full FindingsReport JSON; the success-path
 # usage breadcrumb (nodes.py) validates whether more is needed.
 # Set as a field after construction (the typed __init__ overloads don't list it,
 # though it is a valid model field).
-_MAX_TOKENS = 60000
+_MAX_TOKENS = 128000
 
 
 def build_llm(config: Config) -> ChatOpenAI:
     """Build the OpenAI-compatible client pointing at OpenRouter.
 
     Never hardcodes or echoes the key; temperature=0 for "consistent across
-    re-runs" (prd.md:97).
+    re-runs" (prd.md:97). Passes OpenRouter's ``reasoning.effort`` via
+    ``extra_body`` (the openai-python native channel) so the deepseek reasoning
+    model doesn't overspend reasoning tokens on large diffs (fine-tune-context
+    diagnosis: 7508 reasoning tokens on turn 1 inflated latency into a timeout).
     """
     llm = ChatOpenAI(
         model=config.model,
@@ -40,6 +43,7 @@ def build_llm(config: Config) -> ChatOpenAI:
         api_key=SecretStr(config.api_key),
         temperature=0,
         default_headers=config.attribution_headers,
+        extra_body={"reasoning": {"effort": config.reasoning_effort}},
     )
     llm.max_tokens = _MAX_TOKENS
     return llm

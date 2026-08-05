@@ -30,6 +30,14 @@ class Config(BaseModel):
     api_key: str = Field(..., repr=False)  # never echo in repr — prevents accidental key exposure
     model: str = DEFAULT_MODEL
     base_url: str = DEFAULT_BASE_URL
+    # OpenRouter reasoning effort (fine-tune-context diagnosis): medium is the
+    # measured sweet spot — low emits empty/malformed JSON on the final
+    # structured-output turn (StructuredOutputValidationError, run 6); high
+    # over-investigates and exhausts the iteration cap before emitting. Medium
+    # emits reliably AND, with the hard tool-budget cap in the prompt, converges
+    # in time. Overridable via REASONING_EFFORT for diagnosis runs.
+    # Accepted values: none/minimal/low/medium/high/xhigh/max (OpenRouter docs).
+    reasoning_effort: str = "medium"
 
     # --- Phase 5: PR / GitHub / base-ref inputs (all optional, env-driven) ---
     base_ref: str | None = None
@@ -43,8 +51,25 @@ class Config(BaseModel):
 
     # --- Cost / latency knobs (OQ#2 mechanism, ~5-min NFR prd.md:98) ---
     recursion_limit: ClassVar[int] = 40
-    max_iterations: ClassVar[int] = 12
-    run_timeout: ClassVar[int] = 120  # seconds — enforced via TimeoutPolicy on `checks`
+    # Final value (fine-tune-context diagnosis): the agent must reserve its last
+    # turn for the structured-output emit. Lower values (8/12) saw it spend every
+    # turn on tool batches and hit "run limit" before emitting. 16 gives
+    # headroom for ~8 tool turns + the final emit at medium reasoning.
+    # See context/changes/fine-tune-context/diagnosis.md.
+    max_iterations: ClassVar[int] = 16
+    # Final value (fine-tune-context diagnosis): a SEPARATE cap on TOOL calls
+    # (ToolCallLimitMiddleware, exit_behavior='continue'). The deepseek model
+    # never self-limits its investigation — without this it burns every model
+    # call on tools and never emits (0 findings, runs 4/7/8). 18 lets a well-
+    # batched model (3 calls/turn) do ~6 investigation turns then emit; a 1-call-
+    # per-turn over-investigator is forced to converge and emit before exhausting
+    # max_iterations. Over-budget tool calls return an "exhausted" message that
+    # pushes the model to emit. See diagnosis.md.
+    max_tool_calls: ClassVar[int] = 18
+    # Final value (fine-tune-context diagnosis): 300 gives a paid 1M-context
+    # model room to reason over a large diff; run 3 finished in 221s once the
+    # tool-path bug was fixed. See diagnosis.md for the measured rationale.
+    run_timeout: ClassVar[int] = 300  # seconds — enforced via TimeoutPolicy on `checks`
 
     # --- OpenRouter attribution headers (set on the ChatOpenAI client) ---
     ATTRIBUTION_HEADERS: ClassVar[dict[str, str]] = {
@@ -72,6 +97,7 @@ class Config(BaseModel):
             api_key=api_key,
             model=os.environ.get("MODEL", DEFAULT_MODEL) or DEFAULT_MODEL,
             base_url=os.environ.get("OPENROUTER_BASE_URL", DEFAULT_BASE_URL) or DEFAULT_BASE_URL,
+            reasoning_effort=(os.environ.get("REASONING_EFFORT", "medium") or "medium").lower(),
             base_ref=_clean(os.environ.get("BASE_REF")),
             pr_number=pr_number,
             github_token=_clean(os.environ.get("GITHUB_TOKEN")),

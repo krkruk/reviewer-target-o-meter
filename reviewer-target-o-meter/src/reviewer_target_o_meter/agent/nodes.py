@@ -14,10 +14,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelCallLimitMiddleware, Runtime
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ModelCallLimitMiddleware,
+    Runtime,
+    ToolCallLimitMiddleware,
+)
 from langchain.agents.structured_output import ProviderStrategy
 from langchain.messages import HumanMessage
 from pydantic import ValidationError
@@ -52,6 +57,29 @@ You are a non-interactive critical-point reviewer embedded in an automated
 pipeline. Given the diff (plus any loaded context and an optional plan), emit a
 FindingsReport. You READ AND FLAG ONLY — you never execute the reviewed
 project's commands, never edit files, never post comments, never ask questions.
+
+## BUDGET — the #1 rule (read first)
+
+You have a STRICTLY BOUNDED number of model calls. **If you spend them all on
+tool calls you will emit NOTHING — a total failure worse than any missed
+finding.** Obey these hard limits:
+
+1. **At most 5 tool-call turns, total.** Count them. After your 5th tool-call
+   turn, you MUST stop calling tools and use your next turn to emit the
+   FindingsReport, no matter how much more you could investigate. Partial
+   findings from 5 turns of investigation beat zero findings from endless
+   searching.
+2. **Batch tool calls** — issue 2-4 independent searches in ONE turn (parallel),
+   never one-per-turn.
+3. **Never re-search a symbol you have already read.** Track what you've seen.
+4. **Emit directly.** When you decide to emit, your next turn MUST BE the
+   FindingsReport itself (the structured JSON response). Do NOT spend a turn
+   narrating "I will now emit" or summarizing what you found — that wastes a
+   turn you need for the actual structured response. Go straight to it.
+
+The two most common failure modes that produce a 0-finding report are (1)
+re-searching the same symbol and (2) over-investigating past turn 5. Both leave
+no budget for the emit.
 
 ## Hard rules
 
@@ -184,6 +212,54 @@ set severity to OBSERVATION, and keep the detail to one sentence. These never
 block the PR (they never affect the exit code) — they are advisory style notes
 for the author. Do NOT duplicate a real defect from `findings` here; if a
 concern is a real defect, it belongs in `findings`, not `optional_findings`.
+
+## Worked example (exact output shape — emit this, with your own content)
+
+Below is the exact shape your FindingsReport MUST take. Use your own real
+content from the diff; mirror this structure, these fields, these value styles.
+`severity`/`impact`/`dimension` are enums — use exactly those lowercase tokens.
+Anchors are repo-relative paths with 1-based lines. Fix options are one-sentence
+DIRECTIONS, never applied patches; with two, mark exactly one `recommended`.
+
+```
+{{
+  "findings": [
+    {{
+      "file": "src/bff/routers/scoring_routes.py",
+      "line": 300,
+      "end_line": 306,
+      "severity": "observation",
+      "impact": "medium",
+      "dimension": "maintainability",
+      "title": "Ownership resolution block repeated verbatim in all four new routes",
+      "detail": "list_scores, get_score, patch_score and delete_score each repeat the identical get_user_context(...) + DoesNotExist -> 404 sequence; the next edit to one will drift the other three. Factor the shared resolution into one decorator or helper.",
+      "fixes": [
+        {{"approach": "Extract the user-resolution + 404 sequence into a shared decorator applied to all four routes.", "recommended": true}}
+      ]
+    }}
+  ],
+  "optional_findings": [
+    {{
+      "file": "src/frontend/src/components/ScoreList.tsx",
+      "line": 49,
+      "severity": "observation",
+      "impact": "low",
+      "dimension": "maintainability",
+      "title": "List rows keyed by result_id only — duplicate ids could collapse rows",
+      "detail": "The .map key is result_id with no fallback; if two rows share an id React would warn and mis-reconcile.",
+      "fixes": []
+    }}
+  ],
+  "summary": "2 findings (1 maintainability duplication, 1 frontend keying); no blocking defects.",
+  "overall_verdict": "The biggest risk is the four duplicated ownership blocks in scoring_routes.py drifting on the next edit; centralizing them would remove the maintenance hazard."
+}}
+```
+
+Note: `exit_code`, `flagged`, and finding `id` ("F1") are host-side and ABSENT
+from your emit — the host injects them. Emit only `findings`, `optional_findings`,
+`summary`, `overall_verdict`. An empty `findings` list is valid ONLY when the
+diff genuinely has no flaggable concerns; never emit empty just because you ran
+out of investigation budget — emit what you found, even if partial.
 """
 
 _SEVERITY_ORDER = {
@@ -225,19 +301,44 @@ def build_checks_node(config: Config, agent: Any = None):
     """
     if agent is None:
         model = build_llm(config)
+        # Tool-call budget (fine-tune-context): forces convergence. The model
+        # never self-limits its investigation; without this cap it spends every
+        # iteration on tool calls and never emits (0 findings, runs 4/7/8).
+        # Over-budget tool calls return an error message and execution continues,
+        # so the model converges and emits. Separate from the model-call cap.
+        middleware = cast(
+            "list[AgentMiddleware]",
+            [
+                ToolCallLimitMiddleware(run_limit=config.max_tool_calls, exit_behavior="continue"),
+                ModelCallLimitMiddleware(run_limit=config.max_iterations, exit_behavior="end"),
+            ],
+        )
         agent = create_agent(
             model=model,
             tools=[text_search, structural_search],
             system_prompt=_SYSTEM_PROMPT,
             response_format=ProviderStrategy(FindingsReport, strict=True),
-            middleware=[ModelCallLimitMiddleware(run_limit=config.max_iterations, exit_behavior="end")],
+            middleware=middleware,
         )
 
     async def checks(state: ReviewState, runtime: Runtime) -> dict[str, Any]:
         diff = state.get("diff", "")
         plan = state.get("plan")
         context = state.get("context")
-        parts = [f"Diff:\n{diff}"]
+        repo_path = state.get("repo_path") or ""
+        # Surface the absolute checkout path FIRST so the agent passes the
+        # correct repo_path to text_search/structural_search. Without this the
+        # tools run rg/ast-grep against the reviewer's own CWD (a different
+        # tree) and every search returns empty — the 0-findings root cause on
+        # large PRs (see context/changes/fine-tune-context/diagnosis.md).
+        parts: list[str] = []
+        if repo_path:
+            parts.append(
+                f"Repository path (absolute — pass this verbatim as the "
+                f"`repo_path` argument to EVERY text_search/structural_search "
+                f"call): {repo_path}"
+            )
+        parts.append(f"Diff:\n{diff}")
         if context:
             parts.append(f"Context:\n{context}")
         if plan:
@@ -254,12 +355,15 @@ def build_checks_node(config: Config, agent: Any = None):
             len(diff or ""), plan is not None, context is not None,
         )
         try:
-            result = await agent.ainvoke({"messages": messages})
+            result = await _invoke_with_emit_retry(agent, messages)
         except Exception as exc:  # noqa: BLE001 — OQ#1: ANY model-call failure degrades (AGENTS.md §d).
             # The live crash was an uncaught TypeError from the OpenAI SDK parser
             # (choices=None) escaping here and crashing the pipeline — bypassing
             # every downstream fail-safe. Broad on purpose: only BaseException
-            # (KeyboardInterrupt/CancelledError) keeps propagating.
+            # (KeyboardInterrupt/CancelledError) keeps propagating. (The
+            # recoverable empty-emit parse failure is retried inside
+            # _invoke_with_emit_retry before reaching here; only genuine failures
+            # or a failed retry land in this except.)
             shape = _extract_response_shape(exc)
             _log.warning(
                 "node checks — agent invoke failed: %s: %s | response_shape=%s — "
@@ -273,6 +377,71 @@ def build_checks_node(config: Config, agent: Any = None):
         return _extract_findings(result)
 
     return checks
+
+
+async def _invoke_with_emit_retry(agent: Any, messages: list, max_retries: int = 2) -> Any:
+    """Invoke the agent, retrying on the recoverable empty-content structured emit.
+
+    The deepseek reasoning model intermittently emits EMPTY content on the final
+    structured-output turn (a `StructuredOutputValidationError` with "Expecting
+    value: line 1 column 1 (char 0)") — the model has reasoned over the diff
+    (its tool calls returned real results) but its final emit turn comes back
+    empty. This is model flakiness, NOT a token-budget issue (observed output is
+    ~3-4k tokens vs the 128k ceiling — see diagnosis.md). Retrying with a focused
+    "emit valid JSON now" nudge recovers it: the model produces the findings on a
+    later attempt. Up to ``max_retries`` retries (3 total attempts) bring
+    observed reliability from ~60% (one shot) to ~95%+ (three attempts).
+
+    Any OTHER failure (genuine upstream error, choices=None, etc.) degrades via
+    the original broad-except path — this wrapper only special-cases the
+    recoverable empty-emit. Consistent with OQ#1 (degrade-never-crash): the
+    retry is best-effort; if all attempts fail, the outer except degrades cleanly.
+    """
+    attempt_messages = list(messages)
+    for attempt in range(max_retries + 1):
+        try:
+            return await agent.ainvoke({"messages": attempt_messages})
+        except Exception as exc:
+            if not _is_empty_emit_parse_failure(exc) or attempt == max_retries:
+                # Genuine failure, or we've exhausted retries — degrade via the
+                # caller's broad except (re-raise).
+                raise
+            _log.warning(
+                "node checks — structured emit came back empty (attempt %d/%d, "
+                "model flakiness); retrying with an explicit emit nudge",
+                attempt + 1, max_retries + 1,
+            )
+            # Append a focused nudge and retry. The model already did its
+            # investigation; it just needs to produce the JSON it has ready.
+            attempt_messages = attempt_messages + [
+                HumanMessage(
+                    content=(
+                        "Your previous response was empty. Emit the FindingsReport "
+                        "NOW as valid JSON. Do not call any tools and do not "
+                        "investigate further — use everything you already found and "
+                        "produce the structured FindingsReport this turn."
+                    ),
+                )
+            ]
+    # Unreachable — the loop returns or raises.
+    raise RuntimeError("unreachable")
+
+
+def _is_empty_emit_parse_failure(exc: BaseException) -> bool:
+    """True iff ``exc`` is the recoverable empty-content structured-output parse failure.
+
+    Matches the deepseek flakiness signature: a `StructuredOutputValidationError`
+    (or any exception whose message mentions the structured-output parse failure
+    with the "line 1 column 1 (char 0)" empty-content marker). Narrow on purpose
+    — genuine upstream errors (choices=None, auth, network) must NOT trigger the
+    retry (they degrade via the original broad except).
+    """
+    name = type(exc).__name__
+    msg = str(exc)
+    if "StructuredOutputValidation" not in name and "structured output" not in msg.lower():
+        return False
+    # "line 1 column 1 (char 0)" is the json parser's empty-input marker.
+    return "char 0" in msg or "line 1 column 1" in msg
 
 
 def _log_usage(result: Any) -> None:
