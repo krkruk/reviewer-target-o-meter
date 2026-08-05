@@ -1,10 +1,10 @@
 ---
 change_id: fine-tune-context
 title: Make the reviewer finish on large PRs
-status: implemented
+status: archived
 created: 2026-08-04
 updated: 2026-08-05
-archived_at: null
+archived_at: 2026-08-05T11:56:06Z
 ---
 
 ## Notes
