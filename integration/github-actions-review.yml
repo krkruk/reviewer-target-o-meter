@@ -34,21 +34,21 @@ jobs:
 
       - name: Install reviewer-target-o-meter
         # TODO: switch to `uv tool install reviewer-target-o-meter` once the tool
-      # is published to PyPI. Until then, install from a git URL. The package's
-      # pyproject.toml lives in the nested reviewer-target-o-meter/ subdir (not the
-      # git root), so the #subdirectory= fragment is REQUIRED.
-      #
-      # NOTE: installs from the repo's DEFAULT branch (master). The PR-posting
-      # path lands in feature/change-input-pipeline; until that merges to master,
-      # the installed tool runs in stdout mode (no comment posted). Point at a
-      # branch/tag with `@<ref>` to pick up unreleased code, e.g.:
-      #   git+https://github.com/krkruk/reviewer-target-o-meter@feature/change-input-pipeline#subdirectory=reviewer-target-o-meter
+        # is published to PyPI. Until then, install from a git URL. The package's
+        # pyproject.toml lives in the nested reviewer-target-o-meter/ subdir (not the
+        # git root), so the #subdirectory= fragment is REQUIRED.
+        #
+        # Installs from the repo's DEFAULT branch (master). To validate an
+        # unreleased branch/tag, pin with @<ref>, e.g.:
+        #   git+https://github.com/krkruk/reviewer-target-o-meter@<branch>#subdirectory=reviewer-target-o-meter
         run: |
           uv tool install "git+https://github.com/krkruk/reviewer-target-o-meter#subdirectory=reviewer-target-o-meter"
 
       - name: Install ast-grep (structural_search tool)
         run: |
-          # If ast-grep is unavailable at runtime, structural_search degrades to an
+          # The tool's structural_search looks for the binary by the name
+          # `ast-grep` (shutil.which("ast-grep")); install it under THAT name.
+          # If it is unavailable at runtime, structural_search degrades to an
           # error string pointing the model at text_search — the pipeline still
           # runs (degrade philosophy). Asset name carries an `app-` prefix.
           curl -L https://github.com/ast-grep/ast-grep/releases/latest/download/app-x86_64-unknown-linux-gnu.zip -o ast-grep.zip
@@ -60,6 +60,10 @@ jobs:
         # continue-on-error a flagged review (the normal case) would fail CI —
         # the opposite of "never blocks a merge". The tool's own degrade logic
         # handles real errors (missing key fails fast and SHOULD fail this step).
+        #
+        # `uv run` launches the installed console script in its isolated env.
+        # LOG_LEVEL=DEBUG surfaces the checkout dir-tree + per-call usage so
+        # environment mismatches are diagnosable from the step log.
         continue-on-error: true
         env:
           # LLM provider (REQUIRED) — set this secret in the consumer repo.
@@ -67,7 +71,11 @@ jobs:
           # PR mapping — PR_NUMBER/GITHUB_TOKEN are NOT default runner env vars.
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # These three are auto-provided by the runner on pull_request events;
-          # they flow through without explicit mapping.
-          # GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_BASE_REF
-        run: reviewer-target-o-meter "${{ github.workspace }}"
+          # These three ARE auto-provided by the runner on pull_request events,
+          # but mapped explicitly here for traceability in the step log.
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          # Verbosity — DEBUG shows the checkout dir-tree + model usage breadcrumbs.
+          LOG_LEVEL: DEBUG
+        run: uv run reviewer-target-o-meter "${{ github.workspace }}"

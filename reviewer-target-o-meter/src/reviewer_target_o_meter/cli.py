@@ -13,8 +13,11 @@ failures degrade to stdout + a WARNING (never fail CI — FR-008).
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -53,6 +56,10 @@ def review(
         "review start — mode=%s model=%s base_ref=%s repo=%s",
         mode, config.model, config.base_ref, config.github_repository,
     )
+    # DEBUG-only directory map of the reviewed checkout (2 levels deep). Makes
+    # environment mismatches (wrong checkout, missing files, CWD surprises)
+    # diagnosable from the CI step log without SSH. Off at default INFO.
+    _log_dir_tree(repo_path, log)
 
     # Compute the diff once and feed it to both plan discovery and the graph —
     # don't diff twice. load_plan is None-tolerant (no plan discoverable → the
@@ -126,6 +133,43 @@ def _emit_stdout(report) -> None:
         _finding["id"] = f"O{i}"
     payload["exit_code"] = report.exit_code
     typer.echo(json.dumps(payload, indent=2, default=str))
+
+
+def _log_dir_tree(repo_path: Path, log: Any) -> None:
+    """DEBUG-only: log the reviewed checkout's directory tree (2 levels deep).
+
+    Mirrors `find {repo_path} -type d -maxdepth 2` in-process (no shell-out, so
+    it works on every runner). Makes environment mismatches diagnosable from the
+    CI step log: a wrong checkout, a missing src/ tree, or a CWD surprise all
+    become visible without SSH. Best-effort, never raises — a diagnosis probe
+    must not break the pipeline.
+    """
+    if not log.isEnabledFor(logging.DEBUG):
+        return
+    try:
+        root = Path(repo_path)
+        if not root.is_dir():
+            log.debug("dir-tree: repo_path=%s is not a directory", repo_path)
+            return
+        log.debug("dir-tree (maxdepth 2) for %s:", repo_path)
+        for depth, (dirpath, dirnames, _filenames) in enumerate(
+            _walk_limited(root, max_depth=2)
+        ):
+            rel = Path(dirpath).relative_to(root)
+            log.debug("  %s%s/ (%d subdirs)", "  " * depth, rel, len(dirnames))
+    except Exception as exc:  # noqa: BLE001 — diagnosis probe must never break the pipeline
+        log.debug("dir-tree failed: %s: %s", type(exc).__name__, exc)
+
+
+def _walk_limited(root: Path, max_depth: int):
+    """os.walk yielding only up to ``max_depth`` levels (generator)."""
+    root_str = str(root)
+    for dirpath, dirnames, filenames in os.walk(root_str):
+        depth = Path(dirpath).relative_to(root_str).parts
+        if len(depth) > max_depth:
+            dirnames[:] = []  # don't descend further
+            continue
+        yield dirpath, dirnames, filenames
 
 
 def main() -> None:
