@@ -113,10 +113,14 @@ contract and gives a stable signal on large diffs. Override `MODEL` to swap it
 (e.g. a free slug for zero-cost runs — the free Nemotron variant supports tools
 + structured-outputs but exhausts its token budget on large diffs). The system
 prompt is large but amortized across agent steps via OpenRouter's cached-prompt
-discount; the cost/latency bounds (`recursion_limit=40`, `max_iterations=12`,
-`run_timeout=120s`) hold. The diff input is capped at `MAX_DIFF_CHARS=45000`
-and the model's completion budget at `_MAX_TOKENS=128000` (reasoning + emitted
-JSON both fit).
+discount; the cost/latency bounds (`recursion_limit=40`, `max_iterations=16`,
+`max_tool_calls=18`, `run_timeout=300s`) hold. The reasoning effort defaults to
+`medium` via OpenRouter's `reasoning.effort` (override with `REASONING_EFFORT`).
+The diff input is capped at `MAX_DIFF_CHARS=200000` and the model's completion
+budget at `_MAX_TOKENS=128000` (reasoning + emitted JSON both fit). The separate
+`max_tool_calls` budget forces the agent to converge and emit rather than
+over-investigate (the `ToolCallLimitMiddleware` blocks over-budget tool calls
+with an error message, pushing the model to emit its FindingsReport).
 
 ## Environment variables
 
@@ -139,6 +143,7 @@ to `.env` and fill in the values. `.env` is gitignored.
 | `GITHUB_API_URL` | no | `https://api.github.com` | GitHub API root. **GHA:** auto-provided — do not set manually. |
 | `GITHUB_BASE_REF` | no | — | Target branch on `pull_request`. **GHA:** auto-provided. Ignored if `BASE_REF` is set. |
 | `LOG_LEVEL` | no | `INFO` | Stderr step-trace verbosity: `DEBUG`/`INFO`/`WARNING`/`ERROR`. Governs the INFO trace on stderr only — stdout JSON is never affected. The Markdown preview of the report is always shown (it is the payload, not a log line). |
+| `REASONING_EFFORT` | no | `medium` | OpenRouter reasoning effort for the DeepSeek model: `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`. Lower trims latency but can worsen the structured-emit reliability; higher over-investigates. `medium` is the measured sweet spot. |
 
 > **Mode switching summary** — stdout JSON is the default; PR posting activates
 > only when `PR_NUMBER` + `GITHUB_TOKEN` + `GITHUB_REPOSITORY` are all present.
