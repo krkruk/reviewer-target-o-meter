@@ -490,30 +490,30 @@ state, or interface changes.
 
 #### Manual
 
-- [ ] 1.3 Local `make run DIR=../../target-o-meter/` with `LOG_LEVEL=DEBUG` shows env dump, SHA breadcrumb, inbound char count, per-turn trace
-- [ ] 1.4 `review start` line reads `base_ref_override=…` (no misleading `base_ref=None`)
+- [x] 1.3 Local `make run DIR=../../target-o-meter/` with `LOG_LEVEL=DEBUG` shows env dump, SHA breadcrumb, inbound char count, per-turn trace — ec61259 (confirmed on CI run 31002167288)
+- [x] 1.4 `review start` line reads `base_ref_override=…` (no misleading `base_ref=None`) — ec61259 (confirmed: `base_ref_override=None` in run 31002167288)
 
 ### Phase 2: Close the Valid-But-Empty-Emit Retry Gap
 
 #### Automated
 
-- [x] 2.1 Lint + types pass (`make check`)
-- [x] 2.2 Unit tests pass (`make test`, incl. `_is_suspicious_empty_emit` + `_count_tool_call_turns` cases)
+- [x] 2.1 Lint + types pass (`make check`) — c12c0fd
+- [x] 2.2 Unit tests pass (`make test`, incl. `_is_suspicious_empty_emit` + `_count_tool_call_turns` cases) — c12c0fd
 
 #### Manual
 
-- [ ] 2.3 Triggered PR #28 run: empty-emit retry WARNING fires and recovers findings (or trace explains the persistent empty)
+- [x] 2.3 Triggered PR #28 run: empty-emit retry WARNING fires and recovers findings (or trace explains the persistent empty) — c12c0fd (confirmed on run 31002167288: `valid-but-empty … retrying` → output=1235, 4 findings, exit 1)
 
 ### Phase 3: Consumer Workflow Pin + Commit + Trigger PR #28
 
 #### Automated
 
-- [ ] 3.1 Pushed `review.yml` YAML is valid; the `review` run starts
+- [x] 3.1 Pushed `review.yml` YAML is valid; the `review` run starts — consumer 391361e (run 31002167288)
 
 #### Manual
 
-- [ ] 3.2 PR #28 run step log shows the new DEBUG breadcrumbs
-- [ ] 3.3 Run URL captured and reported
+- [x] 3.2 PR #28 run step log shows the new DEBUG breadcrumbs — consumer 391361e (env dump, git refs, inbound prompt, per-turn trace all present)
+- [x] 3.3 Run URL captured and reported — consumer 391361e (https://github.com/krkruk/target-o-meter/actions/runs/31002167288)
 
 ### Phase 4: Post-Diagnosis Stabilization (follow-up)
 
