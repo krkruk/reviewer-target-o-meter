@@ -1,10 +1,10 @@
 ---
 change_id: debug-logging-and-infra-correction
 title: DEBUG observability + close empty-emit retry gap + CI trigger
-status: implemented
+status: archived
 created: 2026-08-05
 updated: 2026-08-05
-archived_at: null
+archived_at: 2026-08-05T11:58:56Z
 ---
 
 ## Notes
