@@ -205,6 +205,35 @@ def test_cli_emits_info_breadcrumbs_to_stderr(monkeypatch: pytest.MonkeyPatch) -
     assert "review complete" in result.output.lower()
 
 
+def test_cli_dumps_redacted_env_at_debug_and_uses_base_ref_override_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """At LOG_LEVEL=DEBUG the CLI dumps the redacted env (tokens never echoed) and
+    labels the base-ref override field correctly instead of the misleading
+    ``base_ref=None`` (the *resolved* base is diff.py's line, not the CLI's)."""
+    _set_env(monkeypatch)
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghs_secret_value")
+    monkeypatch.setenv("PR_NUMBER", "28")
+    monkeypatch.setattr(cli_mod, "run_review", lambda cfg, inputs: _clean_report())
+    monkeypatch.setattr(cli_mod, "compute_diff", lambda *a, **k: "diff")
+    monkeypatch.setattr(cli_mod, "load_context", lambda *a, **k: None)
+
+    result = runner.invoke(cli_mod.app, ["tests/fixtures/sample-repo"])
+
+    assert result.exit_code == 0, result.output
+    out = result.output
+    # Env dump present: the token var is named but redacted; a non-secret is visible.
+    assert "OPENROUTER_API_KEY" in out
+    assert "<redacted,set>" in out
+    assert "PR_NUMBER" in out and "28" in out
+    # The secret value NEVER appears anywhere in the trace.
+    assert "ghs_secret_value" not in out
+    # The misleading `base_ref=None` label is replaced by the override label.
+    assert "base_ref_override=" in out
+    assert "base_ref=None" not in out
+
+
 def test_cli_emits_markdown_preview_to_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
     """The render_comment() Markdown is echoed to stderr before the post-vs-stdout branch."""
     _set_env(monkeypatch)

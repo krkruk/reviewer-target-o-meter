@@ -22,10 +22,34 @@ missing guard would append a duplicate handler per invoke and double every line)
 from __future__ import annotations
 
 import logging
+import os
+import re
 import sys
 
 _LOGGER_NAME = "reviewer_target_o_meter"
 _FORMAT = "%(levelname)s: %(message)s"
+
+# Secret-named env vars are redacted by pattern (never echoed) so the diagnostic
+# dump can't leak a token regardless of what the runner has set. Covers the two
+# named in the brief (OPENROUTER_API_KEY, GITHUB_TOKEN) plus any future
+# secret-named var. AGENTS.md §d: key read at runtime only, never echoed.
+_SECRET_NAME_RE = re.compile(r"TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL", re.IGNORECASE)
+_REDACTED_SET = "<redacted,set>"
+
+
+def redacted_env() -> dict[str, str]:
+    """Return the process env as a sorted dict with secret-named vars redacted.
+
+    Any var whose name matches the secret pattern (TOKEN/KEY/SECRET/PASSWORD/
+    CREDENTIAL, case-insensitive) is replaced by the literal ``<redacted,set>``
+    marker; its presence in the dict still surfaces that it is set, the value
+    never is. Non-matching vars keep their value. Sorted for a stable,
+    diffable dump. Pure (no logging side effects); the caller emits it.
+    """
+    return {
+        name: _REDACTED_SET if _SECRET_NAME_RE.search(name) else value
+        for name, value in sorted(os.environ.items())
+    }
 
 
 def configure_logging(level: str) -> None:

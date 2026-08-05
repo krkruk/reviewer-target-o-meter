@@ -97,3 +97,45 @@ def test_log_level_controls_what_emits(capsys: pytest.CaptureFixture[str]) -> No
     configure_logging("INFO")
     logging.getLogger(_PACKAGE_LOGGER).info("should be visible")
     assert "should be visible" in capsys.readouterr().err
+
+
+# --- redacted env dump (DEBUG observability) ---
+
+
+class TestRedactedEnv:
+    """``redacted_env`` renders the runtime env with secret-named vars redacted.
+
+    A pattern-based denylist (TOKEN/KEY/SECRET/PASSWORD/CREDENTIAL) so the
+    diagnostic dump surfaces which inputs the tool saw without ever echoing a
+    token (AGENTS.md §d: key read at runtime only, never echoed).
+    """
+
+    def test_redacts_the_named_token_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The two vars named in the brief are redacted regardless of value."""
+        from reviewer_target_o_meter._util import redacted_env
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-live-123")
+        monkeypatch.setenv("GITHUB_TOKEN", "ghs_abc")
+        env = redacted_env()
+        assert env["OPENROUTER_API_KEY"] == "<redacted,set>"
+        assert env["GITHUB_TOKEN"] == "<redacted,set>"
+
+    def test_keeps_non_secret_values_intact(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-secret-named vars keep their real value in the dump."""
+        from reviewer_target_o_meter._util import redacted_env
+
+        monkeypatch.setenv("PR_NUMBER", "28")
+        monkeypatch.setenv("MODEL", "deepseek/deepseek-v4-flash-0731")
+        env = redacted_env()
+        assert env["PR_NUMBER"] == "28"
+        assert env["MODEL"] == "deepseek/deepseek-v4-flash-0731"
+
+    def test_pattern_catches_other_secret_names(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Any name matching the secret pattern is redacted, not just the two."""
+        from reviewer_target_o_meter._util import redacted_env
+
+        monkeypatch.setenv("MY_DATABASE_PASSWORD", "hunter2")
+        monkeypatch.setenv("API_CREDENTIAL", "xyz")
+        env = redacted_env()
+        assert env["MY_DATABASE_PASSWORD"] == "<redacted,set>"
+        assert env["API_CREDENTIAL"] == "<redacted,set>"

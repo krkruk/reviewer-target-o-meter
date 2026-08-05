@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -345,9 +346,19 @@ def build_checks_node(config: Config, agent: Any = None):
             parts.append(f"Plan:\n{plan}")
         else:
             parts.append("Plan: (none provided — skip plan-dependent checks)")
+        human_content = "\n\n".join(parts)
         messages = [
-            HumanMessage(content="\n\n".join(parts)),
+            HumanMessage(content=human_content),
         ]
+        # DEBUG-only inbound prompt size: the system prompt is static, the human
+        # content is the assembled diff+context+plan. Lets a 0-finding run be
+        # correlated with prompt size / truncation. Off at default INFO.
+        if _log.isEnabledFor(logging.DEBUG):
+            _log.debug(
+                "inbound prompt — system_chars=%d human_chars=%d total_chars=%d",
+                len(_SYSTEM_PROMPT), len(human_content),
+                len(_SYSTEM_PROMPT) + len(human_content),
+            )
         # ainvoke (async) so the node's TimeoutPolicy(run_timeout) can be enforced —
         # sync Python execution cannot be safely cancelled in-process.
         _log.info(
@@ -374,6 +385,7 @@ def build_checks_node(config: Config, agent: Any = None):
             return {"findings": []}
         _log.info("node checks — agent invoke end")
         _log_usage(result)
+        _log_message_trace(result)
         return _extract_findings(result)
 
     return checks
@@ -473,6 +485,60 @@ def _log_usage(result: Any) -> None:
             "node checks — model usage: input=%d output=%d total=%d finish_reason=%s",
             usage.input_tokens, usage.output_tokens, usage.total_tokens, usage.finish_reason,
         )
+
+
+def _log_message_trace(result: Any) -> None:
+    """DEBUG-only per-turn trace of the model exchange + the final emit preview.
+
+    Best-effort: tolerates missing/malformed messages and never raises — mirrors
+    ``_extract_usage``. Reveals what the CI log could not: how many turns ran,
+    whether any tools were called, and what the final (possibly empty) emit
+    looked like — the observability missing from the 0-findings run
+    (``output=25, finish_reason=stop`` with no per-turn visibility).
+    """
+    if not _log.isEnabledFor(logging.DEBUG):
+        return
+    try:
+        messages = result.get("messages") if isinstance(result, dict) else None
+        if isinstance(messages, list):
+            for i, msg in enumerate(messages):
+                _log_turn_trace(i, msg)
+        _log_structured_preview(result)
+    except Exception as exc:  # noqa: BLE001 — trace probe must never raise
+        _log.debug("message trace failed: %s: %s", type(exc).__name__, exc)
+
+
+def _log_turn_trace(index: int, msg: Any) -> None:
+    """Log one model turn: role, tool-call names, content preview, token usage."""
+    tool_calls = getattr(msg, "tool_calls", None) or []
+    tool_names = ",".join(
+        str(tc.get("name")) for tc in tool_calls
+        if isinstance(tc, dict) and tc.get("name")
+    ) or "none"
+    content = str(getattr(msg, "content", "") or "")
+    usage = getattr(msg, "usage_metadata", None)
+    usage_str = (
+        f"in={usage.get('input_tokens')} out={usage.get('output_tokens')}"
+        if isinstance(usage, dict)
+        else "n/a"
+    )
+    _log.debug(
+        "turn %d — tools=%s content_chars=%d preview=%r usage=%s",
+        index, tool_names, len(content), content[:300], usage_str,
+    )
+
+
+def _log_structured_preview(result: Any) -> None:
+    """Log a truncated preview of the parsed structured emit (the final report)."""
+    if not isinstance(result, dict):
+        return
+    parsed = result.get("structured_response")
+    if parsed is None:
+        return
+    rendered = str(parsed)
+    _log.debug(
+        "structured_response preview — chars=%d preview=%s", len(rendered), rendered[:500],
+    )
 
 
 def _extract_response_shape(exc: BaseException) -> str:

@@ -62,6 +62,11 @@ def compute_diff(repo_path: str | Path, base_ref: str | None = None) -> str:
         _warn("diff skipped — no base ref resolved (set BASE_REF / GITHUB_BASE_REF)")
         return ""
 
+    # Anchor the review to exact commits so a CI run is tied to precise SHAs, not
+    # just a branch name. INFO (cheap, always useful). Best-effort — a detached
+    # HEAD (the actions/checkout case) falls back, never raises.
+    _log_git_refs(repo, base)
+
     try:
         # --function-context (-W): show each hunk's WHOLE enclosing function, not
         # just the changed lines + 3 context lines. A new branch often duplicates
@@ -122,6 +127,47 @@ def _resolves(repo: Repo, ref: str) -> bool:
     except (BadName, BadObject, GitError, ValueError):
         return False
     return True
+
+
+def _log_git_refs(repo: Repo, base: str) -> None:
+    """Emit an INFO breadcrumb with head SHA+branch and base ref+SHA.
+
+    Best-effort diagnosis probe: any field that can't be read degrades to
+    ``<unknown>``/a fallback marker rather than raising — a probe must never
+    break the diff. The head branch is resolved defensively because
+    ``actions/checkout`` leaves HEAD detached, so ``repo.active_branch`` raises
+    ``TypeError``; we fall back to the GHA env vars and finally ``detached HEAD``.
+    """
+    try:
+        _log.info(
+            "git refs — head_sha=%s head_branch=%s base_ref=%s base_sha=%s",
+            _safe_sha(repo, "HEAD"), _head_branch(repo), base, _safe_sha(repo, base),
+        )
+    except Exception as exc:  # noqa: BLE001 — probe must never break the diff
+        _log.debug("git refs breadcrumb failed: %s: %s", type(exc).__name__, exc)
+
+
+def _safe_sha(repo: Repo, ref: str) -> str:
+    """Return ``ref``'s SHA, or ``<unknown>`` if it can't be read."""
+    try:
+        return repo.commit(ref).hexsha
+    except (BadName, BadObject, GitError, ValueError):
+        return "<unknown>"
+
+
+def _head_branch(repo: Repo) -> str:
+    """Resolve the human-readable head branch name, tolerating a detached HEAD."""
+    try:
+        return repo.active_branch.name
+    except (TypeError, GitError):
+        pass
+    ci_head = os.environ.get("GITHUB_HEAD_REF")
+    if ci_head:
+        return ci_head
+    github_ref = os.environ.get("GITHUB_REF")
+    if github_ref:
+        return github_ref
+    return "detached HEAD"
 
 
 def _cap(raw: str) -> str:
