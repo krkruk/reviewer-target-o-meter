@@ -21,6 +21,13 @@ from reviewer_target_o_meter.agent.nodes import (
     _SYSTEM_PROMPT,
     MAX_FINDINGS_PER_DIMENSION,
 )
+from reviewer_target_o_meter.findings import (
+    Dimension,
+    Finding,
+    FindingsReport,
+    Impact,
+    Severity,
+)
 
 PROMPT = _SYSTEM_PROMPT
 PROMPT_LOWER = _SYSTEM_PROMPT.lower()
@@ -216,4 +223,89 @@ class TestExtractUsageBestEffort:
         assert usage is not None
         assert usage.finish_reason == "length"
         assert usage.output_tokens == 3
+
+
+# --- valid-but-empty-emit detection (Phase 2: close the retry gap) ---
+
+
+class TestIsSuspiciousEmptyEmit:
+    """``_is_suspicious_empty_emit`` identifies the recoverable flake the CI log
+    implicates: a parsed report with nothing in EITHER list AND zero tool-call
+    turns (the model emitted empty without investigating). Distinct from a diff
+    the model genuinely examined and found clean (≥1 tool-call turn → False).
+
+    Mirrors ``TestExtractUsageBestEffort`` — best-effort, never raises, defensive
+    over the result shapes the real agent exposes.
+    """
+
+    @staticmethod
+    def _result(report: Any, messages: list) -> dict[str, Any]:
+        return {"structured_response": report, "messages": messages}
+
+    def test_true_for_empty_report_with_no_tool_calls(self) -> None:
+        """The smoking-gun signature: 0 findings, 0 optional_findings, and the
+        model made zero tool-call turns (emitted empty immediately)."""
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _is_suspicious_empty_emit
+
+        result = self._result(
+            FindingsReport(findings=[], optional_findings=[]),
+            [AIMessage(content="")],  # a turn with no tool calls
+        )
+        assert _is_suspicious_empty_emit(result) is True
+
+    def test_false_when_model_made_a_tool_call_turn(self) -> None:
+        """A genuinely-investigated diff that came back empty is NOT the flake —
+        the model looked, then (correctly or not) found nothing. Don't retry it."""
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _is_suspicious_empty_emit
+
+        result = self._result(
+            FindingsReport(findings=[], optional_findings=[]),
+            [AIMessage(
+                content="",
+                tool_calls=[{"name": "text_search", "args": {}, "id": "1"}],
+            )],
+        )
+        assert _is_suspicious_empty_emit(result) is False
+
+    def test_false_when_findings_present(self) -> None:
+        """A non-empty findings list is a real result, never suspicious."""
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _is_suspicious_empty_emit
+
+        report = FindingsReport(findings=[Finding(
+            file="src/app.py", line=1, severity=Severity.CRITICAL, impact=Impact.HIGH,
+            dimension=Dimension.SECURITY, title="x", detail="y",
+        )])
+        result = self._result(report, [AIMessage(content="")])
+        assert _is_suspicious_empty_emit(result) is False
+
+    def test_false_when_optional_findings_present(self) -> None:
+        """Style observations in optional_findings also count as real output."""
+        from langchain.messages import AIMessage
+
+        from reviewer_target_o_meter.agent.nodes import _is_suspicious_empty_emit
+
+        report = FindingsReport(
+            findings=[],
+            optional_findings=[Finding(
+                file="src/app.py", line=1, severity=Severity.OBSERVATION, impact=Impact.LOW,
+                dimension=Dimension.MAINTAINABILITY, title="style", detail="nit",
+            )],
+        )
+        result = self._result(report, [AIMessage(content="")])
+        assert _is_suspicious_empty_emit(result) is False
+
+    def test_never_raises_on_malformed_result(self) -> None:
+        """Missing messages / structured_response / non-dict → False, never raises."""
+        from reviewer_target_o_meter.agent.nodes import _is_suspicious_empty_emit
+
+        assert _is_suspicious_empty_emit({}) is False
+        assert _is_suspicious_empty_emit(None) is False  # type: ignore[arg-type]
+        assert _is_suspicious_empty_emit({"messages": []}) is False
+        assert _is_suspicious_empty_emit({"structured_response": FindingsReport(findings=[])}) is False
 

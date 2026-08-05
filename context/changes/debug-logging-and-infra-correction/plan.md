@@ -485,8 +485,8 @@ state, or interface changes.
 
 #### Automated
 
-- [x] 1.1 Lint + types pass (`make check`)
-- [x] 1.2 Unit tests pass (`make test`, incl. redaction helper + trace probe asserts)
+- [x] 1.1 Lint + types pass (`make check`) — ec61259
+- [x] 1.2 Unit tests pass (`make test`, incl. redaction helper + trace probe asserts) — ec61259
 
 #### Manual
 
@@ -497,8 +497,8 @@ state, or interface changes.
 
 #### Automated
 
-- [ ] 2.1 Lint + types pass (`make check`)
-- [ ] 2.2 Unit tests pass (`make test`, incl. `_is_suspicious_empty_emit` + `_count_tool_call_turns` cases)
+- [x] 2.1 Lint + types pass (`make check`)
+- [x] 2.2 Unit tests pass (`make test`, incl. `_is_suspicious_empty_emit` + `_count_tool_call_turns` cases)
 
 #### Manual
 

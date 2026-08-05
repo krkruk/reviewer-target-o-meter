@@ -412,7 +412,7 @@ async def _invoke_with_emit_retry(agent: Any, messages: list, max_retries: int =
     attempt_messages = list(messages)
     for attempt in range(max_retries + 1):
         try:
-            return await agent.ainvoke({"messages": attempt_messages})
+            result = await agent.ainvoke({"messages": attempt_messages})
         except Exception as exc:
             if not _is_empty_emit_parse_failure(exc) or attempt == max_retries:
                 # Genuine failure, or we've exhausted retries — degrade via the
@@ -423,20 +423,40 @@ async def _invoke_with_emit_retry(agent: Any, messages: list, max_retries: int =
                 "model flakiness); retrying with an explicit emit nudge",
                 attempt + 1, max_retries + 1,
             )
-            # Append a focused nudge and retry. The model already did its
-            # investigation; it just needs to produce the JSON it has ready.
-            attempt_messages = attempt_messages + [
-                HumanMessage(
-                    content=(
-                        "Your previous response was empty. Emit the FindingsReport "
-                        "NOW as valid JSON. Do not call any tools and do not "
-                        "investigate further — use everything you already found and "
-                        "produce the structured FindingsReport this turn."
-                    ),
-                )
-            ]
+            attempt_messages = attempt_messages + [_emit_nudge_message()]
+            continue
+        # Successful parse — but the deepseek model also intermittently emits a
+        # VALID-BUT-EMPTY report (parses cleanly, raises nothing) without ever
+        # investigating (the output=25, finish_reason=stop, no-tools signature
+        # from the CI log). The original parse-failure retry can't catch that;
+        # this is the second trigger. Same nudge, same shared budget.
+        if attempt < max_retries and _is_suspicious_empty_emit(result):
+            _log.warning(
+                "node checks — structured emit came back valid-but-empty with no "
+                "tool investigation (attempt %d/%d); retrying with an emit nudge",
+                attempt + 1, max_retries + 1,
+            )
+            attempt_messages = attempt_messages + [_emit_nudge_message()]
+            continue
+        return result
     # Unreachable — the loop returns or raises.
     raise RuntimeError("unreachable")
+
+
+def _emit_nudge_message() -> HumanMessage:
+    """The focused 'emit now' nudge appended on either empty-emit retry path.
+
+    The model has already done its investigation (or, for the valid-but-empty
+    flake, skipped it); it just needs to produce the JSON it has ready.
+    """
+    return HumanMessage(
+        content=(
+            "Your previous response was empty. Emit the FindingsReport "
+            "NOW as valid JSON. Do not call any tools and do not "
+            "investigate further — use everything you already found and "
+            "produce the structured FindingsReport this turn."
+        ),
+    )
 
 
 def _is_empty_emit_parse_failure(exc: BaseException) -> bool:
@@ -454,6 +474,54 @@ def _is_empty_emit_parse_failure(exc: BaseException) -> bool:
         return False
     # "line 1 column 1 (char 0)" is the json parser's empty-input marker.
     return "char 0" in msg or "line 1 column 1" in msg
+
+
+def _is_suspicious_empty_emit(result: Any) -> bool:
+    """True iff the parsed report is empty (both lists) AND zero tool-call turns.
+
+    The recoverable flake the CI log implicates: the model emitted a
+    valid-but-empty FindingsReport WITHOUT investigating — the ``output=25,
+    finish_reason=stop, no tool calls`` signature. A successful parse raises
+    nothing, so the original parse-failure retry can't catch it; this predicate
+    is the second retry trigger. Distinct from a diff the model genuinely
+    examined and found clean (>=1 tool-call turn, OR no messages to confirm ->
+    conservative False). Best-effort, never raises.
+    """
+    try:
+        extracted = _extract_findings(result)
+        if extracted["findings"] or extracted["optional_findings"]:
+            return False
+        if not isinstance(result, dict):
+            return False
+        messages = result.get("messages")
+        # Require a real, non-empty messages list to confirm "no investigation" —
+        # a missing/empty list is a malformed result, not the signature.
+        if not isinstance(messages, list) or not messages:
+            return False
+        return _count_tool_call_turns(result) == 0
+    except Exception:  # noqa: BLE001 — predicate must never raise
+        return False
+
+
+def _count_tool_call_turns(result: Any) -> int:
+    """Count model turns that issued at least one named tool call.
+
+    Best-effort, never raises: a non-dict result or missing/non-list messages
+    yield 0. A turn counts iff its ``tool_calls`` list has an entry with a name.
+    """
+    if not isinstance(result, dict):
+        return 0
+    messages = result.get("messages")
+    if not isinstance(messages, list):
+        return 0
+    count = 0
+    for msg in messages:
+        tool_calls = getattr(msg, "tool_calls", None) or []
+        if isinstance(tool_calls, list) and any(
+            isinstance(tc, dict) and tc.get("name") for tc in tool_calls
+        ):
+            count += 1
+    return count
 
 
 def _log_usage(result: Any) -> None:

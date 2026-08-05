@@ -437,3 +437,86 @@ def test_message_trace_probe_never_raises_on_malformed_result() -> None:
     _log_message_trace({})
     _log_message_trace({"structured_response": object()})
     _log_message_trace({"messages": "not-a-list"})
+
+
+# --- empty-emit retry gap (Phase 2: close it) ---
+
+
+def test_checks_node_retries_valid_but_empty_emit_and_recovers() -> None:
+    """The retry gap fix: a successful-but-empty report (0 findings, 0 tool calls)
+    is retried with the emit-nudge; the next attempt emits real findings.
+
+    Proves the fix for the CI smoking gun (output=25, finish_reason=stop, a
+    valid-but-empty FindingsReport that parsed cleanly and was accepted). Drives
+    the real checks node via the DI seam.
+    """
+    import asyncio
+
+    from langchain.messages import AIMessage
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+    from reviewer_target_o_meter.findings import (
+        Dimension,
+        Finding,
+        FindingsReport,
+        Impact,
+        Severity,
+    )
+
+    full = FindingsReport(findings=[Finding(
+        file="src/app.py", line=1, severity=Severity.CRITICAL, impact=Impact.HIGH,
+        dimension=Dimension.SECURITY, title="SQLi", detail="concat")])
+    empty = FindingsReport(findings=[])
+
+    class _EmptyThenFull:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages_input, *_a, **_kw):
+            self.calls += 1
+            if self.calls == 1:
+                return {"structured_response": empty, "messages": [AIMessage(content="")]}
+            return {"structured_response": full, "messages": [AIMessage(content="")]}
+
+    agent = _EmptyThenFull()
+    checks = build_checks_node(_cfg(), agent=agent)
+    state = {"diff": "diff", "plan": None, "context": None, "repo_path": "/repo", "findings": []}
+
+    out = asyncio.run(checks(state, None))
+
+    assert agent.calls == 2, "expected exactly one retry after the valid-but-empty emit"
+    assert len(out["findings"]) == 1  # the retry recovered the CRITICAL finding
+
+
+def test_checks_node_does_not_retry_empty_after_tool_investigation() -> None:
+    """If the model actually investigated (>=1 tool-call turn) then emitted empty,
+    do NOT retry — that is a genuinely-empty result, not the no-investigation
+    flake. Single invocation; findings stay empty."""
+    import asyncio
+
+    from langchain.messages import AIMessage
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+    from reviewer_target_o_meter.findings import FindingsReport
+
+    empty = FindingsReport(findings=[])
+
+    class _EmptyAfterTool:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages_input, *_a, **_kw):
+            self.calls += 1
+            return {"structured_response": empty, "messages": [AIMessage(
+                content="",
+                tool_calls=[{"name": "text_search", "args": {}, "id": "1"}],
+            )]}
+
+    agent = _EmptyAfterTool()
+    checks = build_checks_node(_cfg(), agent=agent)
+    state = {"diff": "diff", "plan": None, "context": None, "repo_path": "/repo", "findings": []}
+
+    out = asyncio.run(checks(state, None))
+
+    assert agent.calls == 1, "no retry when the model investigated via tools"
+    assert out["findings"] == []
