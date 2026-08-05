@@ -519,6 +519,6 @@ state, or interface changes.
 
 #### Manual
 
-- [ ] 4.1 Merge `debug-ci-logging` to tool `master` after validation
-- [ ] 4.2 Revert `review.yml` install pin to master (keep `MODEL` passthrough)
-- [ ] 4.3 Decide permanent model/retry posture from the run
+- [x] 4.1 Merge `debug-ci-logging` to tool `master` after validation — merged via reviewer-target-o-meter#9 (master c1bc0ce)
+- [x] 4.2 Revert `review.yml` install pin to master (keep `MODEL` passthrough) — consumer 31d9103 (LOG_LEVEL=DEBUG + MODEL retained; verified on master run 31002996084)
+- [x] 4.3 Decide permanent model/retry posture from the run — retry stays as-is; the LLM choosing not to call tools is accepted (no prompt-tuning this cycle)
