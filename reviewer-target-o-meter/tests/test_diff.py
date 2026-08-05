@@ -151,6 +151,32 @@ def test_compute_diff_degrades_when_base_unresolvable_in_ci(
     assert "WARNING" in caplog.text
 
 
+def test_compute_diff_logs_head_and_base_sha_breadcrumb(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """compute_diff emits an INFO breadcrumb anchoring the review to exact commits:
+    head SHA + branch, the resolved base ref, and the base SHA — so a CI run is
+    tied to precise commits, not just a branch name. Best-effort: a detached HEAD
+    (the actions/checkout case) must fall back, never raise."""
+    repo = _make_repo(tmp_path, base_branch="main")
+    _add_change(repo, tmp_path)
+    head_sha = repo.head.commit.hexsha
+    base_sha = repo.commit("main").hexsha
+
+    with caplog.at_level("INFO", logger="reviewer_target_o_meter"):
+        compute_diff(tmp_path)
+
+    text = caplog.text
+    assert "head_sha=" in text
+    assert head_sha in text
+    assert "base_sha=" in text
+    assert base_sha in text
+    assert "base_ref=" in text
+    # The head branch field is always surfaced (detached here -> fallback marker,
+    # never a crash from repo.active_branch raising on a detached HEAD).
+    assert "head_branch=" in text
+
+
 def test_resolve_base_falls_back_to_heuristic(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path, base_branch="master")
     _add_change(repo, tmp_path)

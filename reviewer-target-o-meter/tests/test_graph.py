@@ -366,3 +366,157 @@ def test_graph_node_timeout_emits_empty_report(monkeypatch: pytest.MonkeyPatch) 
     assert report_obj.findings == []
     assert report_obj.summary is not None and "timeout" in report_obj.summary.lower()
     assert report_obj.exit_code == 0  # advisory — never crashes the pipeline
+
+
+# --- DEBUG observability probes (inbound prompt size + per-turn trace) ---
+
+
+def test_checks_node_logs_inbound_prompt_size_and_per_turn_trace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """At DEBUG the checks node logs the assembled inbound prompt size (system +
+    human) before invoke, and a per-turn trace of the model exchange (tool calls,
+    content preview) + the final structured_response preview after invoke.
+
+    This is the observability missing from the 0-findings CI run (output=25,
+    finish_reason=stop, no per-turn visibility). Drives the real checks node via
+    the DI seam with a fake agent that returns a tool-call turn + a final emit.
+    """
+    import asyncio
+
+    from langchain.messages import AIMessage
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+    from reviewer_target_o_meter.findings import FindingsReport
+
+    payload = FindingsReport(findings=[], summary="empty-emit-marker")
+    tool_turn = AIMessage(
+        content="investigating the diff",
+        tool_calls=[{"name": "text_search", "args": {"pattern": "x"}, "id": "1"}],
+        usage_metadata={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110},
+    )
+    final_turn = AIMessage(
+        content="",
+        usage_metadata={"input_tokens": 58396, "output_tokens": 25, "total_tokens": 58421},
+        response_metadata={"finish_reason": "stop"},
+    )
+
+    class _TraceAgent:
+        def __init__(self) -> None:
+            self.invoked_with: list = []
+
+        async def ainvoke(self, messages_input, *_a, **_kw):
+            self.invoked_with.append(messages_input)
+            return {"structured_response": payload, "messages": [tool_turn, final_turn]}
+
+    checks = build_checks_node(_cfg(), agent=_TraceAgent())
+    state = {"diff": "DIFFBODY", "plan": "P", "context": "C", "repo_path": "/repo", "findings": []}
+
+    with caplog.at_level("DEBUG", logger="reviewer_target_o_meter"):
+        asyncio.run(checks(state, None))
+
+    text = caplog.text
+    # Inbound prompt size breadcrumb (system + human + total char counts).
+    assert "inbound prompt" in text.lower()
+    assert "system_chars=" in text
+    assert "human_chars=" in text
+    # Per-turn trace surfaces the tool-call turn by name.
+    assert "text_search" in text
+    # And the final structured_response preview (the parsed emit).
+    assert "empty-emit-marker" in text
+
+
+def test_message_trace_probe_never_raises_on_malformed_result() -> None:
+    """The per-turn trace probe must tolerate missing/malformed messages and never
+    raise out of the success path — mirrors the ``_extract_usage`` best-effort
+    contract. Called directly with shapes that have no ``messages`` key at all."""
+    from reviewer_target_o_meter.agent.nodes import _log_message_trace
+
+    # None / empty / missing-messages / non-list — none should raise.
+    _log_message_trace(None)
+    _log_message_trace({})
+    _log_message_trace({"structured_response": object()})
+    _log_message_trace({"messages": "not-a-list"})
+
+
+# --- empty-emit retry gap (Phase 2: close it) ---
+
+
+def test_checks_node_retries_valid_but_empty_emit_and_recovers() -> None:
+    """The retry gap fix: a successful-but-empty report (0 findings, 0 tool calls)
+    is retried with the emit-nudge; the next attempt emits real findings.
+
+    Proves the fix for the CI smoking gun (output=25, finish_reason=stop, a
+    valid-but-empty FindingsReport that parsed cleanly and was accepted). Drives
+    the real checks node via the DI seam.
+    """
+    import asyncio
+
+    from langchain.messages import AIMessage
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+    from reviewer_target_o_meter.findings import (
+        Dimension,
+        Finding,
+        FindingsReport,
+        Impact,
+        Severity,
+    )
+
+    full = FindingsReport(findings=[Finding(
+        file="src/app.py", line=1, severity=Severity.CRITICAL, impact=Impact.HIGH,
+        dimension=Dimension.SECURITY, title="SQLi", detail="concat")])
+    empty = FindingsReport(findings=[])
+
+    class _EmptyThenFull:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages_input, *_a, **_kw):
+            self.calls += 1
+            if self.calls == 1:
+                return {"structured_response": empty, "messages": [AIMessage(content="")]}
+            return {"structured_response": full, "messages": [AIMessage(content="")]}
+
+    agent = _EmptyThenFull()
+    checks = build_checks_node(_cfg(), agent=agent)
+    state = {"diff": "diff", "plan": None, "context": None, "repo_path": "/repo", "findings": []}
+
+    out = asyncio.run(checks(state, None))
+
+    assert agent.calls == 2, "expected exactly one retry after the valid-but-empty emit"
+    assert len(out["findings"]) == 1  # the retry recovered the CRITICAL finding
+
+
+def test_checks_node_does_not_retry_empty_after_tool_investigation() -> None:
+    """If the model actually investigated (>=1 tool-call turn) then emitted empty,
+    do NOT retry — that is a genuinely-empty result, not the no-investigation
+    flake. Single invocation; findings stay empty."""
+    import asyncio
+
+    from langchain.messages import AIMessage
+
+    from reviewer_target_o_meter.agent.nodes import build_checks_node
+    from reviewer_target_o_meter.findings import FindingsReport
+
+    empty = FindingsReport(findings=[])
+
+    class _EmptyAfterTool:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ainvoke(self, messages_input, *_a, **_kw):
+            self.calls += 1
+            return {"structured_response": empty, "messages": [AIMessage(
+                content="",
+                tool_calls=[{"name": "text_search", "args": {}, "id": "1"}],
+            )]}
+
+    agent = _EmptyAfterTool()
+    checks = build_checks_node(_cfg(), agent=agent)
+    state = {"diff": "diff", "plan": None, "context": None, "repo_path": "/repo", "findings": []}
+
+    out = asyncio.run(checks(state, None))
+
+    assert agent.calls == 1, "no retry when the model investigated via tools"
+    assert out["findings"] == []

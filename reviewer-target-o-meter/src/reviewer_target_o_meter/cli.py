@@ -21,7 +21,7 @@ from typing import Any
 
 import typer
 
-from ._util import configure_logging, get_logger
+from ._util import configure_logging, get_logger, redacted_env
 from ._util import warn as _warn
 from .config import Config
 from .context_loader import load_context
@@ -51,9 +51,15 @@ def review(
     configure_logging(config.log_level)
     log = get_logger(__name__)
 
+    # DEBUG-only dump of the runtime env (secret-named vars redacted by pattern)
+    # so a CI step log shows exactly which inputs the tool saw — clearing up "is X
+    # set?" without ever echoing a token (AGENTS.md §d). Off at default INFO.
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("env dump (secret-named vars redacted): %s", redacted_env())
+
     mode = "post" if config.post_to_github else "stdout"
     log.info(
-        "review start — mode=%s model=%s base_ref=%s repo=%s",
+        "review start — mode=%s model=%s base_ref_override=%s repo=%s",
         mode, config.model, config.base_ref, config.github_repository,
     )
     # DEBUG-only directory map of the reviewed checkout (2 levels deep). Makes
