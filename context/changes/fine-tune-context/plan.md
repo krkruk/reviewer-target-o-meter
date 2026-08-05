@@ -601,12 +601,12 @@ untouched.
 
 #### Automated
 
-- [x] 4.1 `make check` green
-- [x] 4.2 `make test` green
-- [x] 4.3 `grep -rn "TEMPORARY" src/ tests/` returns nothing
-- [x] 4.4 `tests/test_cli.py:242-265` passes (metadata-only invariant restored)
+- [x] 4.1 `make check` green — 5922222
+- [x] 4.2 `make test` green — 5922222
+- [x] 4.3 `grep -rn "TEMPORARY" src/ tests/` returns nothing — 5922222
+- [x] 4.4 `tests/test_cli.py:242-265` passes (metadata-only invariant restored) — 5922222
 
 #### Manual
 
-- [x] 4.5 Final PR #28 run at default INFO — real findings, no DEBUG noise, clean production path
-- [x] 4.6 README knob values match the code
+- [x] 4.5 Final PR #28 run at default INFO — real findings, no DEBUG noise, clean production path — 5922222
+- [x] 4.6 README knob values match the code — 5922222
